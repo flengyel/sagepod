@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  sagemath:
+    image: docker.io/sagemath/sagemath:latest
+    container_name: sagemath
+    user: "1000:1000"
+    ports:
+      - "8888:8888"
+    command: sage-jupyter
+    volumes:
+      - ~/Jupyter:/home/sage/notebooks:Z,U
+      - ~/.jupyter:/home/sage/.jupyter:Z,U
+
+networks:
+  default:
+    driver: bridge
+
