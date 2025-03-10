@@ -1,6 +1,6 @@
 # SagePod: SageMath Containerization with Podman
 
-This README describes how to containerize SageMath using Podman, with a focus on resolving permission issues between the host and container.
+This README describes utilities to download and run SageMath containers using Podman. A podman-compose script handles downloading SageMath containers and mounts container directories on the host system for Jupyter notebook access and configuration. Shell scripts automate starting and stopping the container, and provide interactive container access.
 
 ## Overview
 
@@ -21,33 +21,41 @@ Containerizing SageMath presents specific challenges with file permissions when 
 
 ## Python Virtual Environment Setup
 
-This setup uses podman-compose in a Python virtual environment:
+This setup uses podman-compose in a Python virtual environment. The repository includes a `venvfix.sh` script to simplify the setup process:
 
 ```bash
-# Create a virtual environment named 'sagepod'
-python -m venv sagepod
+# Make the script executable
+chmod +x venvfix.sh
+
+# Run the script to set up the virtual environment
+./venvfix.sh
 
 # Activate the virtual environment
-source sagepod/bin/activate
-
-# Install required packages from requirements.txt
-pip install -r requirements.txt
+source bin/activate
 ```
+
+The script will:
+1. Remove any existing virtual environment components
+2. Create a new virtual environment
+3. Upgrade pip, setuptools, and wheel
+4. Install all dependencies from requirements.txt
 
 Remember to activate the virtual environment before running podman-compose commands.
 
-## The Permission Challenge
+## Bind Mounts and User Namespaces
 
-When running SageMath in a container, a specific permission challenge occurs:
+This containerized SageMath setup uses bind mounts to share directories between the host and container. Bind mounts directly map host directories to container directories, enabling persistent storage of notebooks and configurations.
+
+Podman implements user namespaces as a security feature, which isolates users in the container from users on the host system. With user namespaces:
 
 1. Inside the container, SageMath runs as the `sage` user (UID/GID 1000:1000)
-2. On the host, your user account may have the same UID/GID (1000:1000)
-3. Podman maps container UIDs to high-numbered UIDs on the host (e.g., 100999:100999) for security
-4. This mapping can cause permission issues with mounted volumes and Jupyter notebooks
+2. On the host, Podman maps this container user to a high-numbered UID (typically 100999:100999)
 
-## Solution: podman-compose.yml
+The bind mount options (`:Z,U`) in the configuration ensure proper file access across this namespace boundary. The `Z` option handles SELinux contexts, while the `U` option maintains the correct user mapping between container and host.
 
-Create a `podman-compose.yml` file with the following configuration:
+## Podman Compose Configuration
+
+The repository includes a `podman-compose.yml` file with the following configuration:
 
 ```yaml
 version: '3.8'
@@ -70,7 +78,9 @@ networks:
 Key elements:
 - Sets container user to 1000:1000 (matches sage user in container)
 - Maps port 8888 for Jupyter access
-- Uses volume options `Z,U` for SELinux context and UID/GID mapping
+- Uses bind mounts with `:Z,U` options where:
+  - `Z` enables SELinux relabeling for container access
+  - `U` applies the container's UID/GID mapping to the bind mount
 
 ### Important Note on User ID
 
@@ -161,11 +171,11 @@ Access Jupyter at `http://localhost:8888` in your browser.
 
 ## File Ownership
 
-With this setup:
+With this bind mount configuration:
 - Inside container: Files appear as sage:sage (1000:1000)
 - On host: Files appear as sage:sage (100999:100999)
 
-This configuration allows Jupyter to read and write notebooks without permission errors.
+This user namespace mapping allows Jupyter to read and write notebooks without permission errors.
 
 ### Verifying File Ownership
 
@@ -194,6 +204,13 @@ If you encounter issues with podman-compose:
 2. Verify all dependencies are installed with `pip list | grep podman-compose`
 3. Try updating dependencies with `pip install --upgrade podman-compose podman`
 4. Check the helper scripts have proper paths for your environment
+
+## Documentation
+
+- [SageMath Documentation](https://sagemath.org/)
+- [Jupyter Notebook Documentation](https://jupyter-notebook.readthedocs.io/)
+- [Podman Documentation](https://docs.podman.io/)
+- [Podman-Compose GitHub Repository](https://github.com/containers/podman-compose)
 
 ## License
 
