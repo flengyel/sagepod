@@ -1,6 +1,6 @@
 # SagePod: SageMath Containerization with Podman
 
-This README describes utilities to download and run SageMath containers using Podman. A podman-compose script handles downloading SageMath containers and mounts container directories on the host system for Jupyter notebook access and configuration. Shell scripts automate starting and stopping the container, and provide interactive container access.
+This README describes utilities to download and run SageMath containers under Ubuntu Linux under WSL2 using Podman. A podman-compose script handles downloading SageMath containers and mounts container directories on the host system for Jupyter notebook access and configuration. Shell scripts automate starting and stopping the container, and provide interactive container access.
 
 ## Overview
 
@@ -82,7 +82,7 @@ Key elements:
   - `Z` enables SELinux relabeling for container access
   - `U` applies the container's UID/GID mapping to the bind mount
 
-### Important Note on User ID
+### Note on User ID
 
 The `user: "1000:1000"` line should match the UID:GID of the sage user in the container. Additionally, you should verify that this matches your host system user:
 
@@ -110,6 +110,13 @@ sudo useradd -u 100999 -g 100999 -s /bin/bash -m sage
 
 # Add your user to the sage group for file access
 sudo usermod -a -G sage $USER
+
+# Create the Jupyter directory if it doesn't exist
+mkdir -p ~/Jupyter
+
+# Set appropriate permissions on the Jupyter directory
+sudo chown sage:sage ~/Jupyter
+sudo chmod 775 ~/Jupyter
 ```
 
 This creates a user outside the normal UID range that matches Podman's namespace mapping.
@@ -207,7 +214,7 @@ If you encounter issues with podman-compose:
 
 ## Documentation
 
-- [SageMath Documentation](https://sagemath.org/)
+- [SageMath Documentation](https://doc.sagemath.org/)
 - [Jupyter Notebook Documentation](https://jupyter-notebook.readthedocs.io/)
 - [Podman Documentation](https://docs.podman.io/)
 - [Podman-Compose GitHub Repository](https://github.com/containers/podman-compose)
