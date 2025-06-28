@@ -19,6 +19,9 @@ Containerizing SageMath presents specific challenges with file permissions when 
 - Python 3.x (for podman-compose)
 - SageMath container image from Docker Hub
 
+NOTE: As of 28 June 2025, no arm64 SageMath container images are available on Docker Hub. SagePod won't run a SageMath container on the
+Raspberry Pi 5. :(
+
 ## Python Virtual Environment Setup
 
 This setup uses podman-compose in a Python virtual environment. The repository includes a `venvfix.sh` script to simplify the setup process:
