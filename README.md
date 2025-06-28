@@ -19,8 +19,15 @@ Containerizing SageMath presents specific challenges with file permissions when 
 - Python 3.x (for podman-compose)
 - SageMath container image from Docker Hub
 
-NOTE: As of 28 June 2025, no arm64 SageMath container images are available on Docker Hub. SagePod won't run a SageMath container on the
-Raspberry Pi 5. :(
+NOTE: As of 28 June 2025, no arm64 architecture SageMath container images are available on Docker Hub. On the
+Raspberry Pi 5, an attempt to download and run a SageMath Docker container on a Rasperry Pi 5 results in the following 
+devastating error.
+
+```bash
+(sagepod) flengyel@pironman5:~/Python/sagepod $ ./man-up.sh
+Trying to pull docker.io/sagemath/sagemath:latest...
+Error: choosing an image from manifest list docker://sagemath/sagemath:latest: no image found in image index for architecture arm64, variant "v8", OS linux
+```
 
 ## Python Virtual Environment Setup
 
