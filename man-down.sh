@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
+  echo "podman machine requires qemu-system-x86_64 (install with 'sudo apt install qemu-system-x86')." >&2
+  exit 1
+fi
+
 if ! podman ps >/dev/null 2>&1; then
   if ! podman machine start >/dev/null 2>&1; then
     echo "podman is not running and no podman machine could be started." >&2
