@@ -16,6 +16,7 @@ Containerizing SageMath presents specific challenges with file permissions when 
 
 - Ubuntu 24.04 or similar Linux distribution (works with WSL2)
 - Podman installed
+- QEMU user-mode virtualization tools (`qemu-system-x86` on Ubuntu) so Podman can create a machine
 - Python 3.x (for podman-compose)
 - SageMath container image from Docker Hub
 
@@ -150,6 +151,11 @@ The repository includes these helper scripts:
 #!/bin/bash
 podman-compose -f ~/sagepod/podman-compose.yml up -d && podman logs -f sagemath
 ```
+
+This script now ensures `podman` is running (starting the default Podman machine on WSL2 if needed) and provides a clear message
+if a machine has not been initialized yet.
+
+> **Tip for WSL2**: If `podman machine init` fails with `"qemu-system-x86_64": executable file not found`, install QEMU with `sudo apt install qemu-system-x86` and re-run the script.
 
 **man-down.sh** - Stop the container:
 ```bash
