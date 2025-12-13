@@ -92,6 +92,7 @@ Key elements:
 - Uses bind mounts with `:Z,U` options where:
   - `Z` enables SELinux relabeling for container access
   - `U` applies the container's UID/GID mapping to the bind mount
+- The two bind mounts expect host directories at `~/Jupyter` and `~/.jupyter`. The helper scripts will create them if they don't already exist so Jupyter starts cleanly.
 
 ### Note on User ID
 
@@ -146,6 +147,8 @@ This creates a user outside the normal UID range that matches Podman's namespace
 
 The repository includes these helper scripts:
 
+Each script reads the `podman-compose.yml` that sits beside it in this repository, so the configured volumes and user mappings are always used regardless of where you cloned the project.
+
 **man-up.sh** - Start the container and follow logs:
 ```bash
 #!/bin/bash
@@ -156,6 +159,11 @@ This script now ensures `podman` is running (starting the default Podman machine
 if a machine has not been initialized yet.
 
 > **Tip for WSL2**: If `podman machine init` fails with `"qemu-system-x86_64": executable file not found`, install QEMU with `sudo apt install qemu-system-x86` and re-run the script.
+> If `podman machine init --now` downloads Fedora CoreOS but ends with "exit status 1", remove the broken machine and reinitialize it:
+> ```bash
+> podman machine rm -f default
+> podman machine init --now
+> ```
 
 **man-down.sh** - Stop the container:
 ```bash
@@ -173,6 +181,14 @@ Make sure to make the scripts executable:
 ```bash
 chmod +x man-up.sh man-down.sh run-bash.sh
 ```
+
+### Why does Podman download a Fedora machine on WSL2?
+
+Even on Ubuntu under WSL2, Podman needs a small virtual machine to provide the container runtime. The default
+`podman machine init` command downloads a minimal Fedora CoreOS image for this purpose. This image only powers the
+Podman service; your Ubuntu userland, files, and container workload remain unchanged. If you already had Podman working
+on Ubuntu, re-installing QEMU and re-running `podman machine init` simply restores that lightweight VM so Podman can
+start again.
 
 ### Starting the Container
 
