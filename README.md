@@ -151,6 +151,9 @@ The repository includes these helper scripts:
 podman-compose -f ~/sagepod/podman-compose.yml up -d && podman logs -f sagemath
 ```
 
+This script now ensures `podman` is running (starting the default Podman machine on WSL2 if needed) and provides a clear message
+if a machine has not been initialized yet.
+
 **man-down.sh** - Stop the container:
 ```bash
 #!/bin/bash
