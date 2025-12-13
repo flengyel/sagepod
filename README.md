@@ -1,6 +1,9 @@
 # SagePod: SageMath Containerization with Podman
 
-This README describes utilities to download and run SageMath containers under Ubuntu Linux under WSL2 using Podman. A podman-compose script handles downloading SageMath containers and mounts container directories on the host system for Jupyter notebook access and configuration. Shell scripts automate starting and stopping the container, and provide interactive container access.
+This README describes utilities to download and run SageMath containers under Ubuntu Linux under WSL2 using Podman. 
+A podman-compose script handles downloading SageMath containers and mounts container directories on the host system i
+for Jupyter notebook access and configuration. Shell scripts automate starting and stopping the container, and provide i
+interactive container access.
 
 ## Overview
 
@@ -20,9 +23,9 @@ Containerizing SageMath presents specific challenges with file permissions when 
 - Python 3.x (for podman-compose)
 - SageMath container image from Docker Hub
 
-NOTE: As of 28 June 2025, no arm64 architecture SageMath container images are available on Docker Hub. On the
-Raspberry Pi 5, an attempt to download and run a SageMath Docker container on a Rasperry Pi 5 results in the following 
-devastating error.
+NOTE: As of 28 June 2025, no arm64 architecture SageMath container images are available on Docker Hub. 
+On the Raspberry Pi 5, an attempt to download and run a SageMath Docker container on a Rasperry Pi 5 
+results in the following catastrophic, extinction level error.
 
 ```bash
 (sagepod) flengyel@pironman5:~/Python/sagepod $ ./man-up.sh
@@ -32,7 +35,8 @@ Error: choosing an image from manifest list docker://sagemath/sagemath:latest: n
 
 ## Python Virtual Environment Setup
 
-This setup uses podman-compose in a Python virtual environment. The repository includes a `venvfix.sh` script to simplify the setup process:
+This setup uses podman-compose in a Python virtual environment. The repository includes a `venvfix.sh` script 
+to simplify the setup process:
 
 ```bash
 # Make the script executable
@@ -55,14 +59,18 @@ Remember to activate the virtual environment before running podman-compose comma
 
 ## Bind Mounts and User Namespaces
 
-This containerized SageMath setup uses bind mounts to share directories between the host and container. Bind mounts directly map host directories to container directories, enabling persistent storage of notebooks and configurations.
+This containerized SageMath setup uses bind mounts to share directories between the host and container. 
+Bind mounts directly map host directories to container directories, enabling persistent storage of 
+notebooks and configurations.
 
-Podman implements user namespaces as a security feature, which isolates users in the container from users on the host system. With user namespaces:
+Podman implements user namespaces as a security feature, which isolates users in the container from users 
+on the host system. With user namespaces:
 
 1. Inside the container, SageMath runs as the `sage` user (UID/GID 1000:1000)
 2. On the host, Podman maps this container user to a high-numbered UID (typically 100999:100999)
 
-The bind mount options (`:Z,U`) in the configuration ensure proper file access across this namespace boundary. The `Z` option handles SELinux contexts, while the `U` option maintains the correct user mapping between container and host.
+The bind mount options (`:Z,U`) in the configuration ensure proper file access across this namespace boundary. 
+The `Z` option handles SELinux contexts, while the `U` option maintains the correct user mapping between container and host.
 
 ## Podman Compose Configuration
 
@@ -96,7 +104,8 @@ Key elements:
 
 ### Note on User ID
 
-The `user: "1000:1000"` line should match the UID:GID of the sage user in the container. Additionally, you should verify that this matches your host system user:
+The `user: "1000:1000"` line should match the UID:GID of the sage user in the container. 
+You should verify that this matches your host system user:
 
 ```bash
 id $USER
@@ -135,7 +144,8 @@ This creates a user outside the normal UID range that matches Podman's namespace
 
 ## Important Notes
 
-1. Avoid creating a `/home/$USER/.config/containers/containers.conf` file with `userns = "keep-id"` as this conflicts with the compose file settings.
+1. Avoid creating a `/home/$USER/.config/containers/containers.conf` file with `userns = "keep-id"` as this 
+conflicts with the compose file settings.
 
 2. The high UID (100999) is outside the normal range to prevent conflicts with system-assigned UIDs.
 
@@ -147,7 +157,8 @@ This creates a user outside the normal UID range that matches Podman's namespace
 
 The repository includes these helper scripts:
 
-Each script reads the `podman-compose.yml` that sits beside it in this repository, so the configured volumes and user mappings are always used regardless of where you cloned the project.
+Each script reads the `podman-compose.yml` that sits beside it in this repository, so the configured volumes 
+and user mappings are always used regardless of where you cloned the project.
 
 **man-up.sh** - Start the container and follow logs:
 ```bash
@@ -157,13 +168,6 @@ podman-compose -f ~/sagepod/podman-compose.yml up -d && podman logs -f sagemath
 
 This script now ensures `podman` is running (starting the default Podman machine on WSL2 if needed) and provides a clear message
 if a machine has not been initialized yet.
-
-> **Tip for WSL2**: If `podman machine init` fails with `"qemu-system-x86_64": executable file not found`, install QEMU with `sudo apt install qemu-system-x86` and re-run the script.
-> If `podman machine init --now` downloads Fedora CoreOS but ends with "exit status 1", remove the broken machine and reinitialize it:
-> ```bash
-> podman machine rm -f default
-> podman machine init --now
-> ```
 
 **man-down.sh** - Stop the container:
 ```bash
@@ -180,30 +184,6 @@ podman exec -it sagemath /bin/bash
 Make sure to make the scripts executable:
 ```bash
 chmod +x man-up.sh man-down.sh run-bash.sh
-```
-
-### Why does Podman download a Fedora machine on WSL2?
-
-Even on Ubuntu under WSL2, Podman needs a small virtual machine to provide the container runtime. The default
-`podman machine init` command downloads a minimal Fedora CoreOS image for this purpose. This image only powers the
-Podman service; your Ubuntu userland, files, and container workload remain unchanged. If you already had Podman working
-on Ubuntu, re-installing QEMU and re-running `podman machine init` simply restores that lightweight VM so Podman can
-start again.
-
-### Starting the Container
-
-```bash
-# Activate the virtual environment if not already activated
-source ~/sagepod/bin/activate
-
-# Start the container and follow logs
-./man-up.sh
-
-# In a different terminal, you can enter the container with
-./run-bash.sh
-
-# To stop the container
-./man-down.sh
 ```
 
 Access Jupyter at `http://localhost:8888` in your browser.
@@ -224,9 +204,11 @@ After setting up and running the container for the first time, verify the file o
 ls -la ~/Jupyter/
 ```
 
-You should see files owned by sage:sage. If you see numeric UIDs instead (like 100999:100999), it confirms that Podman is mapping the UIDs correctly, but the sage user has not been properly created on the host. In this case, revisit the "Host System Configuration" section.
+You should see files owned by `sage:sage`. If you see numeric UIDs instead (like 100999:100999), it confirms 
+that Podman is mapping the UIDs correctly, but the sage user has not been properly created on the host. 
+In this case, revisit the "Host System Configuration" section.
 
-If you see different UIDs, you may need to adjust the UID:GID values in your setup to match what Podman is using in your specific environment.
+If you see different UIDs, you may need to adjust the UID:GID values in your setup to match what Podman uses in your environment.
 
 ## Troubleshooting
 
