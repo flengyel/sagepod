@@ -1,9 +1,8 @@
 # SagePod: SageMath Containerization with Podman
 
-This README describes utilities to download and run SageMath containers under Ubuntu Linux under WSL2 using Podman. 
-A podman-compose script handles downloading SageMath containers and mounts container directories on the host system i
-for Jupyter notebook access and configuration. Shell scripts automate starting and stopping the container, and provide i
-interactive container access.
+This README describes utilities to download and run SageMath containers under Ubuntu Linux under WSL2 using `podman-compose`.
+A `podman-compose` script handles downloading SageMath containers and mounts container directories on the host system 
+for Jupyter notebook access and configuration. Shell scripts automate starting and stopping the container, and provide interactive container access.
 
 ## Overview
 
@@ -18,14 +17,10 @@ Containerizing SageMath presents specific challenges with file permissions when 
 ## Setup Requirements
 
 - Ubuntu 24.04 or similar Linux distribution (works with WSL2)
-- Podman installed
-- QEMU user-mode virtualization tools (`qemu-system-x86` on Ubuntu) so Podman can create a machine
 - Python 3.x (for podman-compose)
 - SageMath container image from Docker Hub
 
-NOTE: As of 28 June 2025, no arm64 architecture SageMath container images are available on Docker Hub. 
-On the Raspberry Pi 5, an attempt to download and run a SageMath Docker container on a Rasperry Pi 5 
-results in the following catastrophic, extinction level error.
+NOTE: As of 28 June 2025, no arm64 architecture SageMath container images are available on Docker Hub. On the Raspberry Pi 5, an attempt to download and run a SageMath Docker container on a Rasperry Pi 5 results in the following catastrophic, extinction level error.
 
 ```bash
 (sagepod) flengyel@pironman5:~/Python/sagepod $ ./man-up.sh
@@ -59,12 +54,9 @@ Remember to activate the virtual environment before running podman-compose comma
 
 ## Bind Mounts and User Namespaces
 
-This containerized SageMath setup uses bind mounts to share directories between the host and container. 
-Bind mounts directly map host directories to container directories, enabling persistent storage of 
-notebooks and configurations.
+This containerized SageMath setup uses bind mounts to share directories between the host and container. Bind mounts directly map host directories to container directories, enabling persistent storage of notebooks and configurations.
 
-Podman implements user namespaces as a security feature, which isolates users in the container from users 
-on the host system. With user namespaces:
+Podman implements user namespaces as a security feature, which isolates users in the container from users on the host system. With user namespaces:
 
 1. Inside the container, SageMath runs as the `sage` user (UID/GID 1000:1000)
 2. On the host, Podman maps this container user to a high-numbered UID (typically 100999:100999)
@@ -104,8 +96,7 @@ Key elements:
 
 ### Note on User ID
 
-The `user: "1000:1000"` line should match the UID:GID of the sage user in the container. 
-You should verify that this matches your host system user:
+The `user: "1000:1000"` line should match the UID:GID of the sage user in the container. You should verify that this matches your host system user:
 
 ```bash
 id $USER
@@ -157,31 +148,46 @@ conflicts with the compose file settings.
 
 The repository includes these helper scripts:
 
-Each script reads the `podman-compose.yml` that sits beside it in this repository, so the configured volumes 
-and user mappings are always used regardless of where you cloned the project.
+Each script reads the `podman-compose.yml` that sits beside it in this repository, so the configured volumes and user mappings are always used regardless of where you cloned the project.
 
 **man-up.sh** - Start the container and follow logs:
+
 ```bash
-#!/bin/bash
-podman-compose -f ~/sagepod/podman-compose.yml up -d && podman logs -f sagemath
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+COMPOSE_FILE="${SCRIPT_DIR}/podman-compose.yml"
+
+mkdir -p "$HOME/Jupyter" "$HOME/.jupyter"
+
+podman-compose -f "${COMPOSE_FILE}" up -d
+
+echo
+echo "Open in Windows: http://localhost:8888"
+echo "If token auth is on, grab it with:"
+echo "  podman logs sagemath | grep -o 'token=[0-9a-f]*' | head -1"
+
+exec podman logs -f sagemath
 ```
 
-This script now ensures `podman` is running (starting the default Podman machine on WSL2 if needed) and provides a clear message
-if a machine has not been initialized yet.
 
 **man-down.sh** - Stop the container:
+
 ```bash
 #!/bin/bash
 podman-compose -f ~/sagepod/podman-compose.yml down
 ```
 
 **run-bash.sh** - Start a bash shell in the running container:
+
 ```bash
 #!/bin/bash
 podman exec -it sagemath /bin/bash
 ```
 
 Make sure to make the scripts executable:
+
 ```bash
 chmod +x man-up.sh man-down.sh run-bash.sh
 ```
@@ -191,6 +197,7 @@ Access Jupyter at `http://localhost:8888` in your browser.
 ## File Ownership
 
 With this bind mount configuration:
+
 - Inside container: Files appear as sage:sage (1000:1000)
 - On host: Files appear as sage:sage (100999:100999)
 
@@ -223,7 +230,7 @@ If you encounter issues with podman-compose:
 
 1. Ensure the virtual environment is activated with `source ~/sagepod/bin/activate`
 2. Verify all dependencies are installed with `pip list | grep podman-compose`
-3. Try updating dependencies with `pip install --upgrade podman-compose podman`
+3. Try updating dependencies with `pip install --upgrade podman-compose`
 4. Check the helper scripts have proper paths for your environment
 
 ## Documentation
@@ -236,4 +243,3 @@ If you encounter issues with podman-compose:
 ## License
 
 This documentation is provided under the MIT License.
-
