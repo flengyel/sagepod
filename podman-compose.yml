@@ -2,7 +2,8 @@ version: '3.8'
 
 services:
   sagemath:
-    image: docker.io/sagemath/sagemath:latest
+    image: ghcr.io/sagemath/sage/sage-debian-bullseye-standard-with-targets-optional:${SAGE_TAG:-10.7}
+    #image: docker.io/sagemath/sagemath:${SAGE_TAG:-10.7}
     container_name: sagemath
     user: "1000:1000"
     ports:
