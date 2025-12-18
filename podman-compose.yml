@@ -1,17 +1,39 @@
-version: '3.8'
+version: "3.8"
 
 services:
   sagemath:
     image: ghcr.io/sagemath/sage/sage-debian-bullseye-standard-with-targets-optional:${SAGE_TAG:-10.7}
-    #image: docker.io/sagemath/sagemath:${SAGE_TAG:-10.7}
+    # For the DockerHub runtime image instead, you would typically use:
+    # image: docker.io/sagemath/sagemath:${SAGE_TAG:-10.7}
+
     container_name: sagemath
     user: "1000:1000"
+
+    # In the GHCR image, Sage is run from /sage as ./sage
+    working_dir: /sage
+
     ports:
       - "8888:8888"
-    command: sage-jupyter
+
+    environment:
+      - HOME=/home/sage
+      # Critical: avoid unwritable /sage/.sage by relocating DOT_SAGE
+      - DOT_SAGE=/home/sage/.sage
+
+    command:
+      - ./sage
+      - -n
+      - jupyter
+      - --no-browser
+      - --ip=0.0.0.0
+      - --port=8888
+      - --notebook-dir=/home/sage/notebooks
+
     volumes:
-      - ~/Jupyter:/home/sage/notebooks:Z,U
-      - ~/.jupyter:/home/sage/.jupyter:Z,U
+      - ${HOME}/Jupyter:/home/sage/notebooks:Z,U
+      - ${HOME}/.jupyter:/home/sage/.jupyter:Z,U
+      # Persistent, writable Sage state (must exist on host)
+      - ${HOME}/.sagepod-dot_sage:/home/sage/.sage:Z,U
 
 networks:
   default:
