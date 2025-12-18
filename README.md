@@ -1,7 +1,7 @@
 # SagePod: SageMath Containerization with Podman (WSL2)
 
-This repository runs the SageMath container under **Ubuntu on WSL2** using **rootless Podman** and `podman-compose`.
-It bind-mounts host directories for notebooks and Jupyter configuration and exposes Jupyter on port **8888**.
+This repository runs a SageMath container under **Ubuntu on WSL2** using **rootless Podman** and `podman-compose`.
+It bind-mounts host directories for notebooks and Sage/Jupyter state, and exposes Jupyter on port **8888**.
 
 ## Quick start
 
@@ -42,7 +42,42 @@ chmod +x venvfix.sh
 You do **not** need to `source bin/activate` just to use the helper scripts; they prefer the repo-local venv
 `bin/podman-compose` automatically.
 
-### 2) Start / stop
+### 2) Create the bind-mount directories (one-time)
+
+The compose file bind-mounts the following host directories:
+
+- `${HOME}/Jupyter` → `/home/sage/notebooks`
+- `${HOME}/.jupyter` → `/home/sage/.jupyter`
+
+And (for Sage/Jupyter runtime state):
+
+- `${HOME}/.sagepod-dot_sage` → `/home/sage/.sage`  (sets `DOT_SAGE`)
+- `${HOME}/.sagepod-local` → `/home/sage/.local`
+- `${HOME}/.sagepod-config` → `/home/sage/.config`
+- `${HOME}/.sagepod-cache` → `/home/sage/.cache`
+
+Create them:
+
+```bash
+mkdir -p "${HOME}/Jupyter" "${HOME}/.jupyter"          "${HOME}/.sagepod-dot_sage" "${HOME}/.sagepod-local"          "${HOME}/.sagepod-config" "${HOME}/.sagepod-cache"
+
+chmod 700 "${HOME}/.sagepod-dot_sage" "${HOME}/.sagepod-local"           "${HOME}/.sagepod-config" "${HOME}/.sagepod-cache"
+```
+
+#### Make `${HOME}/Jupyter` and `${HOME}/.jupyter` host-writable (recommended)
+
+Rootless Podman uses a user namespace, so container UID/GID `1000:1000` may appear as different numeric IDs on the host.
+If you want to avoid “mystery UID” pain on the host (especially for notebooks), run:
+
+```bash
+chmod +x fix_bind_mounts.sh
+./fix_bind_mounts.sh
+```
+
+This script computes the host-mapped UID/GID for container `1000:1000`, fixes ownership, and installs ACLs so your host
+user keeps `rwX` access. (It uses `sudo` internally and requires `setfacl`.)  
+
+### 3) Start / stop
 
 ```bash
 chmod +x man-up.sh man-down.sh run-bash.sh
@@ -53,67 +88,86 @@ chmod +x man-up.sh man-down.sh run-bash.sh
 ./man-down.sh
 ```
 
+To get an interactive shell inside the running container:
+
+```bash
+./run-bash.sh
+```
+
 ## Compose configuration
 
-See `podman-compose.yml`. The default configuration:
+See `podman-compose.yml`. The configuration in this repository is intended for the **GHCR “with-targets-optional”** image:
 
-- runs the container as `1000:1000` (the `sage` user in the container),
-- exposes `8888:8888`,
-- bind-mounts:
-  - `${HOME}/Jupyter` → `/home/sage/notebooks`
-  - `${HOME}/.jupyter` → `/home/sage/.jupyter`
+- image: `ghcr.io/sagemath/sage/sage-debian-bullseye-standard-with-targets-optional:${SAGE_TAG:-10.7}`
+- working directory: `/sage`
+- Jupyter starts via `./sage -n jupyter ...`
 
 **Tip:** avoid running `podman-compose` with `sudo`. If you do, `~` expands to `/root`, and you will accidentally mount
 `/root/Jupyter` instead of your real notebook directory.
 
-## Bind mounts, user namespaces, and “mystery” UIDs
+## Optional components: XOR-capable SAT backend (CryptoMiniSat via pycryptosat)
 
-Rootless Podman uses a user namespace. Even though Sage runs as `1000:1000` inside the container, those IDs may show up
-as *different* high-numbered IDs on the host. That mapping depends on your `/etc/subuid` and `/etc/subgid`, so **it is
-not a fixed value like 100999**.
+If you want Sage’s `cryptominisat` SAT backend to support native XOR constraints, you need the `pycryptosat` bindings
+installed inside Sage’s Python environment.
 
-### Discover the host-mapped UID/GID for container 1000:1000
+The steps below are the exact ones that worked in this setup.
 
-**Method A (fast; no running container required):**
+### 1) Install a build toolchain inside the container (one-time)
 
 ```bash
-HUID=$(podman unshare awk -v id=1000 '$1<=id && id<($1+$3){print $2+(id-$1);exit}' /proc/self/uid_map)
-HGID=$(podman unshare awk -v id=1000 '$1<=id && id<($1+$3){print $2+(id-$1);exit}' /proc/self/gid_map)
-echo "container 1000:1000 -> host ${HUID}:${HGID}"
+podman exec -u 0 -it sagemath bash -lc   'apt-get update && apt-get install -y --no-install-recommends      build-essential cmake pkg-config    && rm -rf /var/lib/apt/lists/*'
 ```
 
-**Method B (probe file; confirms the mapping end-to-end):**
+### 2) Install `pycryptosat` from source inside Sage (pinned)
+
+Run this as the normal container user (no `-u 0`):
 
 ```bash
-./man-up.sh --no-follow
-podman exec -u 1000:1000 sagemath sh -lc 'echo probe > /home/sage/notebooks/.uidgid_probe'
-stat -c 'host_uid=%u host_gid=%g  %n' "${HOME}/Jupyter/.uidgid_probe"
+podman exec -it sagemath bash -lc   'cd /sage && ./sage -pip uninstall -y pycryptosat || true'
 ```
 
-### Make the mounted directories writable from the host
-
-If you see numeric owners on `${HOME}/Jupyter` (like `101000:101000`), you have two practical options:
-
-**Option 1 (recommended): ACLs (no special users/groups needed)**
+Then force a source build (no binary wheel) and pin the working version:
 
 ```bash
-sudo apt-get install -y acl
-sudo setfacl -R -m "u:${USER}:rwX" -m "d:u:${USER}:rwX" "${HOME}/Jupyter" "${HOME}/.jupyter"
+podman exec -it sagemath bash -lc   'cd /sage && ./sage -pip install --no-binary=pycryptosat pycryptosat==5.11.21'
 ```
 
-**Option 2: create a cosmetic group/user matching the mapped IDs**
-
-Use Method A or B to get `HUID`/`HGID`, then:
+### 3) Verify the bindings work
 
 ```bash
-# Example: replace HUID/HGID with what you discovered.
-sudo groupadd -g "${HGID}" sagepod || true
-sudo useradd  -u "${HUID}" -g "${HGID}" -s /usr/sbin/nologin -M sagepod-sage || true
-sudo usermod -a -G sagepod "${USER}"
-newgrp sagepod
+podman exec -it sagemath bash -lc   'cd /sage && ./sage -python -c "from pycryptosat import Solver; s=Solver(); s.add_clause([1]); print(s.solve())"'
+```
+
+You should see a satisfiable result (e.g. `(True, ...)`).
+
+Optional: verify Sage can instantiate the solver wrapper:
+
+```bash
+podman exec -it sagemath bash -lc   'cd /sage && ./sage -python - <<'"'"'PY'"'"'
+from sage.sat.solvers.satsolver import SAT
+S = SAT(solver="cryptominisat")
+S.add_clause((1,))
+print(S())
+PY'
+```
+
+### 4) (Optional) add a `sage` wrapper on PATH inside the container
+
+In this image, the Sage launcher lives at `/sage/sage` and is not necessarily on `$PATH`.
+If you want `sage` available everywhere inside the container:
+
+```bash
+podman exec -u 0 -it sagemath bash -lc 'ln -sf /sage/sage /usr/local/bin/sage'
+podman exec -it sagemath bash -lc 'which sage && sage --version'
 ```
 
 ## Troubleshooting
+
+### Permission errors under `/home/sage/.local` or `/home/sage/.sage`
+
+These are almost always caused by missing bind mounts for the Sage/Jupyter state directories.
+Re-check that you created the host directories in “Create the bind-mount directories” above, and that `podman-compose.yml`
+includes the corresponding volume mounts.
 
 ### `RunRoot ... is not writable` / `/run/user/<uid>: permission denied`
 
@@ -129,15 +183,6 @@ If you need the token:
 
 ```bash
 podman logs sagemath | grep -Eo 'token=[0-9a-f]+' | tail -n 1
-```
-
-## Raspberry Pi note (arm64)
-
-As of 28 June 2025, the Docker Hub `sagemath/sagemath:latest` image did not provide an arm64 variant.
-On a Raspberry Pi 5 you may see:
-
-```text
-no image found in image index for architecture arm64, variant "v8"
 ```
 
 ## License
