@@ -2,10 +2,12 @@ version: "3.8"
 
 services:
   sagemath:
-    image: ghcr.io/sagemath/sage/sage-debian-bullseye-standard-with-targets-optional:${SAGE_TAG:-10.7}
+    image: localhost/sagequeue-sagemath:${SAGE_TAG:-10.7}-pycryptosat
     # For the DockerHub runtime image instead, you would typically use:
     # image: docker.io/sagemath/sagemath:${SAGE_TAG:-10.7}
-    container_name: sagemath
+    container_name: sagepod
+
+    network_mode: ${SAGEPOD_NETWORK_MODE:-slirp4netns}
 
     working_dir: /sage
 
@@ -13,7 +15,7 @@ services:
     user: "1000:1000"
 
     ports:
-      - "8888:8888"
+      - "${PORT:-8889}:8888"
 
     environment:
       - HOME=/home/sage
