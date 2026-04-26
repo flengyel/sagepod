@@ -7,19 +7,19 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 COMPOSE_FILE="${SCRIPT_DIR}/podman-compose.yml"
 
-CONTAINER_NAME="${CONTAINER_NAME:-sagemath}"
-PORT="${PORT:-8888}"
+CONTAINER_NAME="${CONTAINER_NAME:-sagepod}"
+PORT="${PORT:-8889}"
 
 usage() {
   cat <<'USAGE'
 Usage: ./man-up.sh [--no-follow] [--open]
 
   --no-follow   Start the stack but do not follow logs (returns immediately).
-  --open        Try to open http://localhost:8888 in the default Windows browser.
+  --open        Try to open http://localhost:8889 in the default Windows browser.
 
 Environment:
-  CONTAINER_NAME   default: sagemath
-  PORT             default: 8888
+  CONTAINER_NAME   default: sagepod
+  PORT             default: 8889
 USAGE
 }
 
@@ -49,8 +49,12 @@ require_cmd() {
 require_cmd podman
 
 # Prefer the repo-local venv podman-compose if it exists (so you don't have to 'source bin/activate').
-if [[ -x "${SCRIPT_DIR}/bin/podman-compose" ]]; then
+if [[ -x "${SCRIPT_DIR}/.venv/bin/podman-compose" ]]; then
+  PODMAN_COMPOSE="${SCRIPT_DIR}/.venv/bin/podman-compose"
+elif [[ -x "${SCRIPT_DIR}/bin/podman-compose" ]]; then
   PODMAN_COMPOSE="${SCRIPT_DIR}/bin/podman-compose"
+elif [[ -x "${HOME}/src/sagequeue/.venv/bin/podman-compose" ]]; then
+  PODMAN_COMPOSE="${HOME}/src/sagequeue/.venv/bin/podman-compose"
 else
   require_cmd podman-compose
   PODMAN_COMPOSE="podman-compose"
@@ -71,7 +75,7 @@ if ! podman ps >/dev/null 2>&1; then
 fi
 
 # Create bind-mount directories expected by podman-compose.yml (safe if they already exist).
-mkdir -p "$HOME/Jupyter" "$HOME/.jupyter"
+mkdir -p "$HOME/Jupyter" "$HOME/.jupyter" "$HOME/.sagepod-dot_sage" "$HOME/.sagepod-local" "$HOME/.sagepod-config" "$HOME/.sagepod-cache"
 
 # Start / update the stack.
 "$PODMAN_COMPOSE" -f "${COMPOSE_FILE}" up -d
