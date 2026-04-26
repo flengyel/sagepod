@@ -1,188 +1,362 @@
-# SagePod: SageMath Containerization with Podman (WSL2)
+# SagePod
 
-This repository runs a SageMath container under **Ubuntu on WSL2** using **rootless Podman** and `podman-compose`.
-It bind-mounts host directories for notebooks and Sage/Jupyter state, and exposes Jupyter on port **8888**.
+`sagepod` runs a SageMath/Jupyter container under rootless Podman on WSL2.
 
-## Quick start
+Current restore model:
 
-### 0) WSL2 prerequisite: enable systemd
+- WSL2 distro: Debian or Ubuntu
+- container runtime: rootless Podman
+- compose runner: `podman-compose`
+- networking: `slirp4netns`
+- notebook directory on host: `${HOME}/Jupyter`
+- Jupyter URL from Windows: `http://localhost:8889`
+- container name: `sagepod`
+- Sage image: `localhost/sagequeue-sagemath:10.7-pycryptosat`
 
-Rootless Podman needs a working per-user runtime directory (`/run/user/<uid>`). On WSL2, you typically only get that
-reliably with systemd enabled.
+`sagepod` deliberately reuses the local Sage image built by `sagequeue`, rather than building a second Sage image.
 
-Edit `/etc/wsl.conf` (merge with any existing sections you already have; do not delete them):
+## Prerequisites
+
+### WSL2 with systemd
+
+Edit `/etc/wsl.conf`:
 
 ```ini
 [boot]
 systemd=true
 ```
 
-Then from **Windows PowerShell**:
+Then from Windows PowerShell:
 
 ```powershell
 wsl.exe --shutdown
 ```
 
-Open Ubuntu again and sanity-check:
+Reopen the WSL distro and check:
 
 ```bash
 ps -p 1 -o comm=
+systemctl --user show-environment >/dev/null && echo "systemd --user OK"
 podman ps
 ```
 
-If `podman ps` works as your normal user, you are good.
+Expected:
 
-### 1) Create the Python virtual environment
-
-```bash
-chmod +x venvfix.sh
-./venvfix.sh
+```text
+systemd
+systemd --user OK
 ```
 
-You do **not** need to `source bin/activate` just to use the helper scripts; they prefer the repo-local venv
-`bin/podman-compose` automatically.
+`podman ps` should run as the normal Linux user, not via `sudo`.
 
-### 2) Create the bind-mount directories (one-time)
+### Required Debian/Ubuntu packages
 
-The compose file bind-mounts the following host directories:
+Install the small host-side tools:
 
-- `${HOME}/Jupyter` → `/home/sage/notebooks`
-- `${HOME}/.jupyter` → `/home/sage/.jupyter`
+```bash
+sudo apt update
+sudo apt install -y podman slirp4netns acl python3-venv
+```
 
-And (for Sage/Jupyter runtime state):
+If `podman-compose` is not installed globally, the helper scripts can use the repo-local copy from:
 
-- `${HOME}/.sagepod-dot_sage` → `/home/sage/.sage`  (sets `DOT_SAGE`)
-- `${HOME}/.sagepod-local` → `/home/sage/.local`
-- `${HOME}/.sagepod-config` → `/home/sage/.config`
-- `${HOME}/.sagepod-cache` → `/home/sage/.cache`
+```text
+${HOME}/src/sagequeue/.venv/bin/podman-compose
+```
+
+A local `sagepod` venv may also be used if present.
+
+### Rootless Podman defaults for WSL2
+
+For this Debian/Ubuntu WSL2 restore, rootless Podman works best with `cgroupfs`, file logging, and `slirp4netns`.
+
+Create or update:
+
+```bash
+mkdir -p ~/.config/containers
+
+cat > ~/.config/containers/containers.conf <<'CONF'
+[engine]
+cgroup_manager="cgroupfs"
+events_logger="file"
+
+[network]
+default_rootless_network_cmd="slirp4netns"
+CONF
+```
+
+Check:
+
+```bash
+podman info --format 'cgroupManager={{.Host.CgroupManager}} eventsLogger={{.Host.EventLogger}}'
+```
+
+Expected:
+
+```text
+cgroupManager=cgroupfs eventsLogger=file
+```
+
+## Shared Sage image
+
+`sagepod` uses:
+
+```text
+localhost/sagequeue-sagemath:10.7-pycryptosat
+```
+
+This image is built by the `sagequeue` repository. The usual route is:
+
+```bash
+cd ~/src/sagequeue
+bin/setup.sh
+```
+
+or explicitly:
+
+```bash
+cd ~/src/sagequeue
+bin/build-image.sh
+```
+
+Verify that the image exists:
+
+```bash
+podman image exists localhost/sagequeue-sagemath:10.7-pycryptosat && echo "Sage image present"
+```
+
+Verify `pycryptosat` inside the image:
+
+```bash
+podman run --rm --network slirp4netns localhost/sagequeue-sagemath:10.7-pycryptosat \
+  bash -lc 'cd /sage && ./sage -python -c "import pycryptosat; print(pycryptosat.__file__)"'
+```
+
+Expected path begins with:
+
+```text
+/sage/local/
+```
+
+## Bind-mount directories
+
+`podman-compose.yml` bind-mounts these host directories:
+
+```text
+${HOME}/Jupyter              -> /home/sage/notebooks
+${HOME}/.jupyter             -> /home/sage/.jupyter
+${HOME}/.sagepod-dot_sage    -> /home/sage/.sage
+${HOME}/.sagepod-local       -> /home/sage/.local
+${HOME}/.sagepod-config      -> /home/sage/.config
+${HOME}/.sagepod-cache       -> /home/sage/.cache
+```
 
 Create them:
 
 ```bash
-mkdir -p "${HOME}/Jupyter" "${HOME}/.jupyter"          "${HOME}/.sagepod-dot_sage" "${HOME}/.sagepod-local"          "${HOME}/.sagepod-config" "${HOME}/.sagepod-cache"
-
-chmod 700 "${HOME}/.sagepod-dot_sage" "${HOME}/.sagepod-local"           "${HOME}/.sagepod-config" "${HOME}/.sagepod-cache"
+mkdir -p \
+  ~/Jupyter \
+  ~/.jupyter \
+  ~/.sagepod-dot_sage \
+  ~/.sagepod-local \
+  ~/.sagepod-config \
+  ~/.sagepod-cache
 ```
 
-#### Make `${HOME}/Jupyter` and `${HOME}/.jupyter` host-writable (recommended)
-
-Rootless Podman uses a user namespace, so container UID/GID `1000:1000` may appear as different numeric IDs on the host.
-If you want to avoid “mystery UID” pain on the host (especially for notebooks), run:
+Fix host-side permissions for rootless Podman bind mounts:
 
 ```bash
 chmod +x fix_bind_mounts.sh
 ./fix_bind_mounts.sh
+
+sudo chgrp sage ~/.sagepod-dot_sage ~/.sagepod-local ~/.sagepod-config ~/.sagepod-cache
+chmod 770 ~/.sagepod-dot_sage ~/.sagepod-local ~/.sagepod-config ~/.sagepod-cache
 ```
 
-This script computes the host-mapped UID/GID for container `1000:1000`, fixes ownership, and installs ACLs so your host
-user keeps `rwX` access. (It uses `sudo` internally and requires `setfacl`.)  
+The second pair of commands is needed because the historical `fix_bind_mounts.sh` fixes `~/Jupyter` and `~/.jupyter`, but may not cover all `.sagepod-*` directories.
 
-### 3) Start / stop
+## Start and stop
+
+Make scripts executable:
 
 ```bash
-chmod +x man-up.sh man-down.sh run-bash.sh
+chmod +x man-up.sh man-down.sh run-bash.sh show-mapped-ids.sh check_cryptominisat_version.sh
+```
 
-./man-up.sh --open
-# Windows browser: http://localhost:8888
+Start Jupyter without following logs:
 
+```bash
+./man-up.sh --no-follow
+```
+
+Open from Windows:
+
+```text
+http://localhost:8889
+```
+
+Get the token if needed:
+
+```bash
+podman logs sagepod 2>&1 | grep -Eo 'token=[0-9a-f]+' | tail -n 1
+```
+
+Stop the container:
+
+```bash
 ./man-down.sh
 ```
 
-To get an interactive shell inside the running container:
+Follow logs:
 
 ```bash
-./run-bash.sh
+podman logs -f sagepod
 ```
 
-## Compose configuration
-
-See `podman-compose.yml`. The configuration in this repository is intended for the **GHCR “with-targets-optional”** image:
-
-- image: `ghcr.io/sagemath/sage/sage-debian-bullseye-standard-with-targets-optional:${SAGE_TAG:-10.7}`
-- working directory: `/sage`
-- Jupyter starts via `./sage -n jupyter ...`
-
-**Tip:** avoid running `podman-compose` with `sudo`. If you do, `~` expands to `/root`, and you will accidentally mount
-`/root/Jupyter` instead of your real notebook directory.
-
-## Optional components: XOR-capable SAT backend (CryptoMiniSat via pycryptosat)
-
-If you want Sage’s `cryptominisat` SAT backend to support native XOR constraints, you need the `pycryptosat` bindings
-installed inside Sage’s Python environment.
-
-The steps below are the exact ones that worked in this setup.
-
-### 1) Install a build toolchain inside the container (one-time)
+Interactive shell inside the container:
 
 ```bash
-podman exec -u 0 -it sagemath bash -lc   'apt-get update && apt-get install -y --no-install-recommends      build-essential cmake pkg-config    && rm -rf /var/lib/apt/lists/*'
+podman exec -it sagepod bash
 ```
 
-### 2) Install `pycryptosat` from source inside Sage (pinned)
+## Validation
 
-Run this as the normal container user (no `-u 0`):
+Check the running containers:
 
 ```bash
-podman exec -it sagemath bash -lc   'cd /sage && ./sage -pip uninstall -y pycryptosat || true'
+podman ps --format '{{.Names}}  {{.Ports}}  {{.Image}}'
 ```
 
-Then force a source build (no binary wheel) and pin the working version:
+Expected `sagepod` line:
 
-```bash
-podman exec -it sagemath bash -lc   'cd /sage && ./sage -pip install --no-binary=pycryptosat pycryptosat==5.11.21'
+```text
+sagepod  0.0.0.0:8889->8888/tcp  localhost/sagequeue-sagemath:10.7-pycryptosat
 ```
 
-### 3) Verify the bindings work
+Check Sage and `pycryptosat`:
 
 ```bash
-podman exec -it sagemath bash -lc   'cd /sage && ./sage -python -c "from pycryptosat import Solver; s=Solver(); s.add_clause([1]); print(s.solve())"'
+podman exec sagepod bash -lc \
+  'cd /sage && ./sage -python -c "from sage.all import factor; import pycryptosat; print(factor(2**10-1)); print(pycryptosat.__file__)"'
 ```
 
-You should see a satisfiable result (e.g. `(True, ...)`).
+Expected output includes:
 
-Optional: verify Sage can instantiate the solver wrapper:
-
-```bash
-podman exec -it sagemath bash -lc   'cd /sage && ./sage -python - <<'"'"'PY'"'"'
-from sage.sat.solvers.satsolver import SAT
-S = SAT(solver="cryptominisat")
-S.add_clause((1,))
-print(S())
-PY'
+```text
+3 * 11 * 31
+/sage/local/
 ```
 
-### 4) (Optional) add a `sage` wrapper on PATH inside the container
+## Compose notes
 
-In this image, the Sage launcher lives at `/sage/sage` and is not necessarily on `$PATH`.
-If you want `sage` available everywhere inside the container:
+The active compose file uses:
+
+```yaml
+image: localhost/sagequeue-sagemath:${SAGE_TAG:-10.7}-pycryptosat
+container_name: sagepod
+network_mode: ${SAGEPOD_NETWORK_MODE:-slirp4netns}
+ports:
+  - "${PORT:-8889}:8888"
+```
+
+Override port:
 
 ```bash
-podman exec -u 0 -it sagemath bash -lc 'ln -sf /sage/sage /usr/local/bin/sage'
-podman exec -it sagemath bash -lc 'which sage && sage --version'
+PORT=8890 ./man-up.sh --no-follow
+```
+
+Override network mode:
+
+```bash
+SAGEPOD_NETWORK_MODE=slirp4netns ./man-up.sh --no-follow
 ```
 
 ## Troubleshooting
 
-### Permission errors under `/home/sage/.local` or `/home/sage/.sage`
+### `podman-compose` not found
 
-These are almost always caused by missing bind mounts for the Sage/Jupyter state directories.
-Re-check that you created the host directories in “Create the bind-mount directories” above, and that `podman-compose.yml`
-includes the corresponding volume mounts.
-
-### `RunRoot ... is not writable` / `/run/user/<uid>: permission denied`
-
-This is almost always a WSL2 systemd issue. Re-check the **systemd prerequisite** above.
-
-### Jupyter URL / token
-
-The helper script prints a Windows-friendly URL:
-
-- `http://localhost:8888`
-
-If you need the token:
+Use the `sagequeue` venv path, or build a local `sagequeue` venv:
 
 ```bash
-podman logs sagemath | grep -Eo 'token=[0-9a-f]+' | tail -n 1
+cd ~/src/sagequeue
+bin/setup.sh
+```
+
+Then retry:
+
+```bash
+cd ~/src/sagepod
+./man-up.sh --no-follow
+```
+
+### `netavark: nftables error`
+
+Use `slirp4netns`. The compose file defaults to:
+
+```yaml
+network_mode: ${SAGEPOD_NETWORK_MODE:-slirp4netns}
+```
+
+Also make sure `~/.config/containers/containers.conf` contains:
+
+```ini
+[network]
+default_rootless_network_cmd="slirp4netns"
+```
+
+### TLS error pulling from GHCR
+
+If building the shared image fails with a certificate issuer such as:
+
+```text
+Gateway CA - Cloudflare Managed
+```
+
+then Cloudflare Gateway TLS inspection is intercepting `ghcr.io`.
+
+Add a Cloudflare Zero Trust HTTP “Do Not Inspect” rule for:
+
+```text
+ghcr.io
+```
+
+Then verify in WSL:
+
+```bash
+printf '' | openssl s_client -connect ghcr.io:443 -servername ghcr.io -showcerts 2>/dev/null \
+  | openssl x509 -noout -subject -issuer -dates -fingerprint -sha256
+```
+
+The issuer should no longer be the Cloudflare Gateway CA.
+
+### Permission errors under `/home/sage/.local`, `/home/sage/.config`, or `/home/sage/.cache`
+
+Recreate and fix the `.sagepod-*` bind-mount directories:
+
+```bash
+mkdir -p ~/.sagepod-dot_sage ~/.sagepod-local ~/.sagepod-config ~/.sagepod-cache
+sudo chgrp sage ~/.sagepod-dot_sage ~/.sagepod-local ~/.sagepod-config ~/.sagepod-cache
+chmod 770 ~/.sagepod-dot_sage ~/.sagepod-local ~/.sagepod-config ~/.sagepod-cache
+```
+
+### Wrong container name
+
+Current container name is:
+
+```text
+sagepod
+```
+
+Old scripts or commands may still refer to:
+
+```text
+sagemath
+```
+
+Check live names:
+
+```bash
+podman ps --format '{{.Names}}'
 ```
 
 ## License
