@@ -1,102 +1,51 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-# Bring the SageMath container *up* (man-up, man pages…).
-# Default behavior: start detached, print a Windows-friendly URL, then follow logs.
-
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-COMPOSE_FILE="${SCRIPT_DIR}/podman-compose.yml"
-
-CONTAINER_NAME="${CONTAINER_NAME:-sagepod}"
-PORT="${PORT:-8889}"
+source "$(dirname "${BASH_SOURCE[0]}")/bin/common.sh"
 
 usage() {
   cat <<'USAGE'
-Usage: ./man-up.sh [--no-follow] [--open]
+Usage: ./man-up.sh [--no-follow | --follow] [--open]
 
-  --no-follow   Start the stack but do not follow logs (returns immediately).
-  --open        Try to open http://localhost:8889 in the default Windows browser.
+Start SagePod, check Sage and its mounts, and print the Jupyter URL.
+  --no-follow, -n  Return after startup checks.
+  --follow, -f     Follow container logs (the default); Ctrl-C stops following.
+  --open, -o       Open the configured URL in the Windows browser when available.
 
-Environment:
-  CONTAINER_NAME   default: sagepod
-  PORT             default: 8889
+Environment: SAGE_TAG=10.7, PORT=8889, CONTAINER_NAME=sagepod,
+             SAGEPOD_NETWORK_MODE=slirp4netns
 USAGE
 }
-
 FOLLOW=1
 OPEN=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-follow|-n) FOLLOW=0 ;;
-    --open|-o)      OPEN=1 ;;
-    --help|-h)      usage; exit 0 ;;
-    *)
-      echo "Unknown option: $1" >&2
-      usage >&2
-      exit 2
-      ;;
+    --follow|-f) FOLLOW=1 ;;
+    --open|-o) OPEN=1 ;;
+    --help|-h) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
   esac
   shift
 done
 
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || {
-    echo "Missing required command: $1" >&2
-    exit 127
-  }
-}
+require_rootless_podman
+find_compose
+mkdir -p -- "${MOUNT_DIRS[@]}"
+ensure_image
+compose up -d
+"${SAGEPOD_ROOT}/bin/verify.sh"
 
-require_cmd podman
-
-# Prefer the repo-local venv podman-compose if it exists (so you don't have to 'source bin/activate').
-if [[ -x "${SCRIPT_DIR}/.venv/bin/podman-compose" ]]; then
-  PODMAN_COMPOSE="${SCRIPT_DIR}/.venv/bin/podman-compose"
-elif [[ -x "${SCRIPT_DIR}/bin/podman-compose" ]]; then
-  PODMAN_COMPOSE="${SCRIPT_DIR}/bin/podman-compose"
-elif [[ -x "${HOME}/src/sagequeue/.venv/bin/podman-compose" ]]; then
-  PODMAN_COMPOSE="${HOME}/src/sagequeue/.venv/bin/podman-compose"
+printf '\nJupyter: http://localhost:%s\n' "$PORT"
+# Jupyter writes its startup URL to stderr; include both log streams.
+TOKEN="$(podman logs --tail 2000 "$CONTAINER_NAME" 2>&1 | grep -Eo 'token=[0-9a-f]+' | tail -n 1 || true)"
+if [[ -n "$TOKEN" ]]; then
+  printf 'URL with token: http://localhost:%s/tree?%s\n' "$PORT" "$TOKEN"
 else
-  require_cmd podman-compose
-  PODMAN_COMPOSE="podman-compose"
+  printf 'The token may appear shortly. Run: podman logs --tail 2000 %s\n' "$CONTAINER_NAME"
 fi
-
-if [[ ! -f "${COMPOSE_FILE}" ]]; then
-  echo "Compose file not found: ${COMPOSE_FILE}" >&2
-  exit 1
+if [[ "$OPEN" == 1 ]] && command -v powershell.exe >/dev/null 2>&1; then
+  powershell.exe -NoProfile -Command "Start-Process 'http://localhost:${PORT}'" >/dev/null 2>&1 || true
 fi
-
-# Sanity check: rootless podman must be able to create /run/user/$UID/... on WSL2.
-if ! podman ps >/dev/null 2>&1; then
-  echo "podman is not usable as this user." >&2
-  echo "If you're on WSL2 and see /run/user/<uid> permission errors," >&2
-  echo "enable systemd in /etc/wsl.conf ([boot] systemd=true) and restart WSL." >&2
-  podman ps || true
-  exit 1
-fi
-
-# Create bind-mount directories expected by podman-compose.yml (safe if they already exist).
-mkdir -p "$HOME/Jupyter" "$HOME/.jupyter" "$HOME/.sagepod-dot_sage" "$HOME/.sagepod-local" "$HOME/.sagepod-config" "$HOME/.sagepod-cache"
-
-# Start / update the stack.
-"$PODMAN_COMPOSE" -f "${COMPOSE_FILE}" up -d
-
-echo
-echo "Jupyter (Windows browser): http://localhost:${PORT}"
-
-# Best-effort token extraction (non-fatal if it isn't present yet).
-TOKEN="$(podman logs "${CONTAINER_NAME}" 2>/dev/null | grep -Eo 'token=[0-9a-f]+' | tail -n 1 || true)"
-if [[ -n "${TOKEN}" ]]; then
-  echo "Token (if needed): ${TOKEN}"
-else
-  echo "Token (if needed): podman logs ${CONTAINER_NAME} | grep -Eo 'token=[0-9a-f]+' | tail -n 1"
-fi
-
-if [[ "${OPEN}" == "1" ]]; then
-  if command -v powershell.exe >/dev/null 2>&1; then
-    powershell.exe -NoProfile -Command "Start-Process 'http://localhost:${PORT}'" >/dev/null 2>&1 || true
-  fi
-fi
-
-if [[ "${FOLLOW}" == "1" ]]; then
-  exec podman logs -f "${CONTAINER_NAME}"
+if [[ "$FOLLOW" == 1 ]]; then
+  exec podman logs -f "$CONTAINER_NAME"
 fi

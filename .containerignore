@@ -1,0 +1,3 @@
+# The image installs from upstream packages; it copies no checkout files.
+*
+!Containerfile
