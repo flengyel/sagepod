@@ -95,8 +95,8 @@ another directory.
 | `./man-up.sh --no-follow --open` | Also open the URL in the Windows browser, when PowerShell is available. |
 | `./man-down.sh` | Stop and remove the container; retain the image and host data. |
 | `./run-bash.sh` | Open a shell in the running SagePod container. |
-| `bin/verify.sh` | Check Sage, the solver, and all six container mounts. |
-| `./check_cryptominisat_version.sh` | Print Sage and `pycryptosat` versions from the container. |
+| `bin/verify.sh` | Report Sage/Python/solver versions and check all six container mounts and the solver. |
+| `./check_cryptominisat_version.sh` | Print Sage, Python, and `pycryptosat` versions from the container. |
 
 Save notebook work before stopping or recreating the container. Files in the bind
 mounts persist; running kernels and unsaved in-memory results do not.
@@ -275,7 +275,7 @@ Sage and filesystem access; it is not an HTTP readiness check for Jupyter.
 | `bin/fix-bind-mounts.sh`, `bin/show-mapped-ids.sh` | Manage and inspect rootless mount permissions. |
 | `bin/verify.sh`, top-level helpers | Start, stop, and check the container. |
 | `tests/` | Host-side regression tests, without a Sage image. |
-| `compiling_sage/` | Separate host-source-build helpers; not part of the container setup. |
+| [`compiling_sage/`](compiling_sage/README.md) | Separate native Sage 10.10 source-build helpers and instructions. |
 | [Setup provenance](docs/setup-provenance.md) | Sources and changes made when incorporating SageQueue's setup. |
 
 Run the host-side checks with:
@@ -284,10 +284,11 @@ Run the host-side checks with:
 python3 -m unittest discover -s tests -v
 ```
 
-These checks use command substitutes for Podman. With `setfacl` installed, they
-also exercise inherited ACLs on temporary files. A complete installation check
-requires `bin/setup.sh` on a supported rootless Podman host, followed by opening
-Jupyter and evaluating a Sage notebook cell.
+These checks use command substitutes for Podman and native build/package commands.
+With `setfacl` installed, they also exercise inherited ACLs on temporary files.
+A complete container installation check requires `bin/setup.sh` on a supported
+rootless Podman host, followed by opening Jupyter and evaluating a Sage notebook
+cell.
 
 ## License
 

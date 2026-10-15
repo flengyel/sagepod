@@ -16,12 +16,15 @@ require_cmd podman
 podman exec -i "$CONTAINER_NAME" /sage/sage -python - <<'PYTHON'
 from importlib.metadata import version
 from pathlib import Path
+import sys
 from tempfile import TemporaryFile
 
 from sage.all import factor
+from sage.env import SAGE_VERSION
 from sage.sat.solvers.cryptominisat import CryptoMiniSat
 import pycryptosat
 
+print("Sage", SAGE_VERSION, "Python", sys.version.split()[0])
 print("factor(1023) =", factor(1023))
 solver = CryptoMiniSat()
 solver.add_clause((1,))

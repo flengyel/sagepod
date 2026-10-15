@@ -1,5 +1,18 @@
 # Standalone setup review — 2026-10-15
 
+## Current validated release
+
+SagePod currently defaults to **Sage 10.10 on Debian Trixie**, with Python 3.13.5
+and source-built `pycryptosat==5.11.21`. The running container uses this image.
+See [Sage 10.10 upgrade validation](#sage-1010-upgrade-validation--2026-10-15)
+for the build, solver, Jupyter, persistence, and production-upgrade results.
+The [native source-build helpers](../compiling_sage/README.md) also default to
+Sage 10.10; a complete native host build remains outside the container validation.
+
+The earlier Sage 10.7 and 10.8 sections below preserve the versions and results
+observed during those historical tests. References to 10.8 in the migration
+instructions describe the retained rollback image.
+
 The revised setup removes SagePod's repository-level dependency on SageQueue.
 Host-side checks and live validation pass on Debian 13 under WSL2, including the
 rootless image build, mount access, Jupyter Sage execution, and persistence after
@@ -11,7 +24,8 @@ installation and inherited-ACL defects described below.
 The editorial review covers the complete original `README.md` at SagePod commit
 `3c70e9b7aa7db49c1bc7434b0d11c8b4451ba597`, the SageQueue installation instructions
 at `80140ea1d2d0053b8015dc9092812fabd0c0e053`, and the revised SagePod README and
-setup provenance. The separate `compiling_sage/` workflow is outside this review.
+setup provenance. That original review excluded the separate `compiling_sage/`
+workflow; its later update is documented in the native-build instructions.
 There are no mathematical theorems or proofs in the reviewed material.
 
 The governing source consulted was Donald E. Knuth, Tracy Larrabee, and Paul M.
@@ -303,3 +317,20 @@ SageQueue retained its container ID, image, PID, start time, and persistent unit
 states. SagePod was left running Sage 10.10 with Python 3.13.5 and
 `pycryptosat==5.11.21`. The existing SagePod 10.8 image remains available for
 rollback; the README describes selecting it with `SAGE_TAG=10.8`.
+
+### Documentation and helper audit
+
+The follow-up audit updated the optional native-build workflow to the shared
+Sage 10.10 default, replaced its Sage 10.5 path and old package/extension commands,
+and added native-build instructions. Native prerequisites now come from the
+selected release's Debian metadata. The post-installation helper compiles the
+same `pycryptosat==5.11.21` pin and uses Notebook 7/JupyterLab 4 widget packages.
+Container diagnostics now report the actual Sage and Python versions.
+
+All 26 host tests passed, including native command routing, source/runtime
+version checks, prerequisite dry-run behavior, and failure handling. All shell
+scripts passed Bash syntax checks and ShellCheck. Local documentation links and
+anchors passed validation. A temporary container exercised the native
+prerequisite dry run against the real Sage 10.10 metadata. The updated diagnostic
+helpers passed against the running SagePod 10.10 container, including solver and
+mount checks. A complete native host compilation was not repeated.

@@ -8,6 +8,10 @@ The SagePod starting point was
 Both repositories carry the same MIT license and copyright notice, retained in
 `LICENSE`.
 
+The current SagePod release uses Sage 10.10 on Debian Trixie with source-built
+`pycryptosat==5.11.21`. See the [validation record](setup-review.md) for the
+upgrade from the earlier Bullseye-based Sage 10.8 image.
+
 | SageQueue source | SagePod adaptation |
 | --- | --- |
 | `Containerfile` | Use Sage 10.10 on Debian Trixie after compatibility validation; retain the build dependencies and source-built `pycryptosat==5.11.21`; install outside the mounted home and test Sage's solver interface. |
@@ -44,3 +48,9 @@ label option `z`; SagePod-specific mounts retain `Z`. See the
 The obsolete tracked `pyvenv.cfg` is removed. Top-level compatibility wrappers retain
 existing command names, and the venv repair replaces only `.venv`. Legacy in-place
 venv files are not automatically removed.
+
+The optional [native source-build helpers](../compiling_sage/README.md) share
+the Sage 10.10 default. Their prerequisite package names come from that Sage
+release's metadata, and their post-installation step uses the same source-built
+`pycryptosat` pin as the container. Their native-build scope is separate from
+the incorporated SageQueue container setup.
