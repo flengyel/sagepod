@@ -170,10 +170,10 @@ chmod +x fix_bind_mounts.sh
 ./fix_bind_mounts.sh
 
 sudo chgrp sage ~/.sagepod-dot_sage ~/.sagepod-local ~/.sagepod-config ~/.sagepod-cache
-chmod 770 ~/.sagepod-dot_sage ~/.sagepod-local ~/.sagepod-config ~/.sagepod-cache
+sudo chmod 770 ~/.sagepod-dot_sage ~/.sagepod-local ~/.sagepod-config ~/.sagepod-cache
 ```
 
-The second pair of commands is needed because the historical `fix_bind_mounts.sh` fixes `~/Jupyter` and `~/.jupyter`, but may not cover all `.sagepod-*` directories.
+The second pair of commands is needed because the `fix_bind_mounts.sh` fixes `~/Jupyter` and `~/.jupyter`, but may not cover all `.sagepod-*` directories.
 
 ## Start and stop
 
