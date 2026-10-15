@@ -1,6 +1,6 @@
 # Adapted from flengyel/sagequeue; see docs/setup-provenance.md.
-ARG SAGE_TAG=10.8
-FROM ghcr.io/sagemath/sage/sage-debian-bullseye-standard-with-targets-optional:${SAGE_TAG}
+ARG SAGE_TAG=10.10
+FROM ghcr.io/sagemath/sage/sage-debian-trixie-standard-with-targets-optional:${SAGE_TAG}
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   sagemath:
-    image: localhost/sagepod-sagemath:${SAGE_TAG:-10.8}-pycryptosat
+    image: localhost/sagepod-sagemath:${SAGE_TAG:-10.10}-pycryptosat
     container_name: ${CONTAINER_NAME:-sagepod}
 
     network_mode: ${SAGEPOD_NETWORK_MODE:-slirp4netns}

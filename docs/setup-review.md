@@ -237,3 +237,69 @@ running.
 
 An isolated Sage 10.7 image build also passed the current recipe's build checks
 during review. Its temporary review image was removed afterward.
+
+## Sage 10.10 upgrade validation — 2026-10-15
+
+The upgrade moves the default from Sage 10.8 to
+[Sage 10.10](https://github.com/sagemath/sage/releases/tag/10.10). The upstream
+Bullseye image repository has no `10.10` tag; registry checks also found no
+Bookworm tag. `Containerfile` now uses
+`ghcr.io/sagemath/sage/sage-debian-trixie-standard-with-targets-optional:10.10`.
+Its manifest digest is
+`sha256:73c6da0bf0186dc05838a6d184d33fa1bd0f962aba069a299a0b4bbfc2e08cda`.
+The 26 layers, totaling about 4.05 GiB compressed, were pulled during validation.
+
+The Trixie base supplies Python 3.13.5 and GCC 14.2. The existing source-build
+command compiled and installed `pycryptosat==5.11.21` for Python 3.13 without a
+recipe change beyond the Sage tag and Debian base. The image registered the Sage
+kernel as root; kernelspec discovery, module-location, and SAT/UNSAT build checks
+passed as runtime user `1000:1000`.
+The resulting image is `localhost/sagepod-sagemath:10.10-pycryptosat`, ID
+`5268b48bd5b27df1c415b5578da10884f588894c3982f0bd7c02873c48ce7caf`.
+The compiled module is
+`/sage/local/var/lib/sage/venv-python3.13/lib/python3.13/site-packages/pycryptosat.cpython-313-x86_64-linux-gnu.so`.
+
+### Isolated compatibility and persistence checks
+
+Tests ran on the same Debian 13.7/WSL2 rootless Podman host as the earlier
+validation. Compose project `sagepod1010validation`, container
+`sagepod1010-validation`, localhost port 8890, and temporary sources for all six
+mounts kept the test separate from the running SagePod 10.8 and SageQueue
+containers. Their IDs, images, PIDs, start times, and SageQueue persistent unit
+states matched the baseline throughout this phase.
+
+| Check | Actual result |
+| --- | --- |
+| Sage and solver | Sage 10.10, Python 3.13.5, pycryptosat 5.11.21, UID/GID `1000:1000`; matrix determinant, GF(2) polynomial arithmetic, GF(256), CryptoMiniSat XOR SAT/UNSAT, and the SAT factory passed. |
+| Mounts | The actual permission-helper body prepared all six temporary paths. Host and container read, created, and edited files with inherited ACLs; existing 0600/0700 fixtures retained contents and executable status. |
+| Jupyter | Authenticated HTTP 200 for status and notebook routes through localhost and 127.0.0.1. A fresh Sage kernel factored 1023 and passed CryptoMiniSat SAT/UNSAT checks over the notebook WebSocket API. |
+| Persistence | All 25 saved notebook/probe checksums matched with the container removed and after recreation. The saved notebook reopened, and both cells ran successfully in the new container. |
+| Host checks | All 19 regression tests, Bash syntax, ShellCheck, dependency checks, and whitespace checks passed. The repository Containerfile matches the recipe used for the successful image build. |
+
+The isolated container and pod were removed after validation. The executed
+notebook, temporary test data, scripts, and redacted logs remain under
+`/tmp/sagepod-1010-20261015/`. Graphical UI behavior, Windows-browser forwarding,
+SELinux relabeling, and other hosts or architectures were not tested. Rebuilding
+older Sage tags against the new Trixie base has not been validated.
+
+### Production upgrade
+
+SagePod's Jupyter API reported no active sessions or kernels immediately before
+the switch. All six production mount trees were backed up with ACLs and extended
+attributes to
+`/tmp/sagepod-1010-20261015/backup/sagepod-10.8-data-before-upgrade.tar.gz`.
+The backup directory is private to the host user. SHA-256 checksums were recorded
+for the 11 preexisting files under the notebook directory.
+
+`man-down.sh` removed SagePod 10.8, and `man-up.sh --no-follow` started the tested
+10.10 image using the same six production mounts and port 8889. Runtime checks
+passed for the compiled solver and writes in every mount. Authenticated status,
+kernelspec, and notebook routes returned HTTP 200 through localhost and
+127.0.0.1. A temporary production Sage kernel confirmed Sage 10.10, arithmetic,
+and CryptoMiniSat SAT/UNSAT behavior, then was shut down. All 11 notebook-directory
+checksums matched after the upgrade.
+
+SageQueue retained its container ID, image, PID, start time, and persistent unit
+states. SagePod was left running Sage 10.10 with Python 3.13.5 and
+`pycryptosat==5.11.21`. The existing SagePod 10.8 image remains available for
+rollback; the README describes selecting it with `SAGE_TAG=10.8`.

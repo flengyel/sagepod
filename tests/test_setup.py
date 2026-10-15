@@ -127,8 +127,8 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(permissions["args"][4:], [str(self.home / p) for p in expected])
         self.assertTrue(all((self.home / p).is_dir() for p in expected))
         build = next(i for i, c in enumerate(calls) if c["args"][:1] == ["build"])
-        self.assertIn("SAGE_TAG=10.8", calls[build]["args"])
-        self.assertIn("localhost/sagepod-sagemath:10.8-pycryptosat", calls[build]["args"])
+        self.assertIn("SAGE_TAG=10.10", calls[build]["args"])
+        self.assertIn("localhost/sagepod-sagemath:10.10-pycryptosat", calls[build]["args"])
         up = next(i for i, c in enumerate(calls) if c["tool"] == "podman-compose" and "up" in c["args"])
         check = next(i for i, c in enumerate(calls) if c["args"][:2] == ["exec", "-i"])
         self.assertLess(build, up)
@@ -300,7 +300,7 @@ class SetupTests(unittest.TestCase):
 class ComposeTests(unittest.TestCase):
     def test_default_and_custom_configuration(self):
         import yaml
-        for overrides, tag, port, container in [({}, "10.8", "8889", "sagepod"),
+        for overrides, tag, port, container in [({}, "10.10", "8889", "sagepod"),
                 ({"SAGE_TAG": "10.7", "PORT": "8890", "CONTAINER_NAME": "sagepod-test"},
                  "10.7", "8890", "sagepod-test")]:
             with self.subTest(tag=tag), tempfile.TemporaryDirectory() as directory:

@@ -3,7 +3,7 @@
 
 SAGEPOD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${SAGEPOD_ROOT}/podman-compose.yml"
-export SAGE_TAG="${SAGE_TAG:-10.8}"
+export SAGE_TAG="${SAGE_TAG:-10.10}"
 export CONTAINER_NAME="${CONTAINER_NAME:-sagepod}"
 export PORT="${PORT:-8889}"
 export SAGEPOD_NETWORK_MODE="${SAGEPOD_NETWORK_MODE:-slirp4netns}"

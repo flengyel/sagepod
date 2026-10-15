@@ -6,10 +6,11 @@ CryptoMiniSat support through `pycryptosat`; no SageQueue checkout or image is
 required. Installation downloads the base image and packages from their upstream
 registries.
 
-The defaults are Sage 10.8, container `sagepod`, and Jupyter at
+The defaults are Sage 10.10, container `sagepod`, and Jupyter at
 <http://localhost:8889>. Notebooks remain in `~/Jupyter` when the container stops.
-Sage 10.8 has passed isolated container, solver, Jupyter, and persistence
-checks with this setup; see the [validation record](docs/setup-review.md).
+Sage 10.10 uses the upstream Debian Trixie image. See the
+[validation record](docs/setup-review.md) for container, solver, Jupyter, and
+persistence checks with this setup.
 
 ## Prerequisites
 
@@ -107,7 +108,7 @@ to the image builder, Compose, and container checks.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `SAGE_TAG` | `10.8` | Base-image tag and local-image version. |
+| `SAGE_TAG` | `10.10` | Base-image tag and local-image version. |
 | `PORT` | `8889` | Host port mapped to Jupyter's container port 8888. |
 | `CONTAINER_NAME` | `sagepod` | Container name used by every helper. |
 | `SAGEPOD_NETWORK_MODE` | `slirp4netns` | Podman network mode for builds and the running container. |
@@ -123,7 +124,7 @@ Keep the same overrides for later start, stop, and diagnostic commands. The help
 use Compose project `sagepod` and prefer `.venv/bin/podman-compose`, with a fallback
 to `podman-compose` on `PATH`. Setup always creates the repository's own `.venv`.
 
-The local image is `localhost/sagepod-sagemath:10.8-pycryptosat`, or the corresponding
+The local image is `localhost/sagepod-sagemath:10.10-pycryptosat`, or the corresponding
 tag when `SAGE_TAG` is set. `Containerfile` compiles `pycryptosat==5.11.21` from
 source in Sage's Python environment and checks that the package lies outside
 `/home/sage`, where bind mounts could hide it. It also tests a satisfiable and an
@@ -164,7 +165,14 @@ Building alone leaves the running container in place. Stop and start it to use t
 new image. A failed build therefore does not remove a working container. For a
 different Sage version, export `SAGE_TAG` before the sequence above. The optional
 `bin/build-image.sh --sage-tag VERSION` selects only that build's version; export
-the same value before starting it. Other base-image versions require validation.
+the same value before starting it. The selected tag must exist in the upstream
+Debian Trixie image repository. Other base-image versions require validation.
+
+To upgrade an existing Sage 10.8 installation, save notebook work, update this
+checkout, and run the rebuild/stop/start sequence above. The six data paths stay
+the same. To return to an already-built Sage 10.8 image, stop SagePod and start it
+with `SAGE_TAG=10.8 ./man-up.sh --no-follow`. Retain that override for subsequent
+commands. Building Sage 10.8 with the new Trixie base has not been validated.
 
 Rebuild the local Python environment:
 
