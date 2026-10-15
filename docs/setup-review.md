@@ -155,7 +155,9 @@ the executed notebook and redacted logs remain locally under
 Sage 10.8 passed an isolated compatibility test with Python 3.12.5 and the existing
 `pycryptosat==5.11.21` pin after two image-recipe repairs. The starting checkout was
 the merged `main` commit `c0cad3b168a63156b9cd22f5be2043bfc60de214`; the repairs and
-this record are on `codex/sage-10-8-validation`. The default remains Sage 10.7.
+this record are on `codex/sage-10-8-validation`. At validation time the default
+remained Sage 10.7; the subsequent review changed the default to the validated
+Sage 10.8 image with source-built `pycryptosat==5.11.21`.
 
 ### Isolation and build repairs
 
@@ -215,3 +217,23 @@ Sage API or an in-place migration of existing user notebooks and configuration.
 The graphical notebook UI, Windows-browser forwarding, SELinux relabeling, and
 other hosts were not tested. The complete Sage 10.7 rebuild was not repeated with
 the modified recipe; the earlier 10.7 results above predate these two repairs.
+
+## Default version review — 2026-10-15
+
+The follow-up review found that the build, helpers, and Compose configuration
+still defaulted to Sage 10.7 despite the successful Sage 10.8 validation. Their
+defaults, help text, README, and regression expectations now select Sage 10.8.
+Explicit `SAGE_TAG` overrides remain supported.
+
+The existing Sage 10.8 image's build history confirms the source installation of
+`pycryptosat==5.11.21`. SagePod was started with that image on host port 8889.
+Runtime checks confirmed Sage 10.8, the compiled Python extension, UID/GID
+`1000:1000`, SAT/UNSAT solver operation, and writes in all six mounts.
+Authenticated Jupyter status and kernelspec requests returned HTTP 200, and a
+temporary Sage Jupyter kernel passed arithmetic and CryptoMiniSat SAT/UNSAT
+checks before being shut down. All 19 host regression tests, Bash syntax checks,
+ShellCheck, dependency checks, and whitespace checks passed. SagePod was left
+running.
+
+An isolated Sage 10.7 image build also passed the current recipe's build checks
+during review. Its temporary review image was removed afterward.

@@ -10,7 +10,7 @@ Both repositories carry the same MIT license and copyright notice, retained in
 
 | SageQueue source | SagePod adaptation |
 | --- | --- |
-| `Containerfile` | Retain Sage 10.7, the build dependencies, and source-built `pycryptosat==5.11.21`; install outside the mounted home and test Sage's solver interface. |
+| `Containerfile` | Use Sage 10.8 after compatibility validation; retain the build dependencies and source-built `pycryptosat==5.11.21`; install outside the mounted home and test Sage's solver interface. |
 | `bin/setup.sh` | Prepare SagePod mounts and `.venv`, build a missing image, start Jupyter, and check mounts and solver operation. |
 | `bin/build-image.sh` | Build `localhost/sagepod-sagemath`; leave existing containers running until explicitly stopped. |
 | `bin/venvfix.sh` | Keep the environment under `.venv`; retain SagePod's pinned requirements and optional interpreter argument. |

@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   echo 'Usage: bin/build-image.sh [--sage-tag VERSION]'
   echo 'Build the SagePod image. Running containers are left in place.'
-  echo 'SAGE_TAG defaults to 10.7; --sage-tag overrides it for this build.'
+  echo 'SAGE_TAG defaults to 10.8; --sage-tag overrides it for this build.'
 }
 while [[ $# -gt 0 ]]; do
   case "$1" in

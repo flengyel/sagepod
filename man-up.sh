@@ -11,7 +11,7 @@ Start SagePod, check Sage and its mounts, and print the Jupyter URL.
   --follow, -f     Follow container logs (the default); Ctrl-C stops following.
   --open, -o       Open the configured URL in the Windows browser when available.
 
-Environment: SAGE_TAG=10.7, PORT=8889, CONTAINER_NAME=sagepod,
+Environment: SAGE_TAG=10.8, PORT=8889, CONTAINER_NAME=sagepod,
              SAGEPOD_NETWORK_MODE=slirp4netns
 USAGE
 }

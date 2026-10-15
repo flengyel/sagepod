@@ -6,9 +6,9 @@ CryptoMiniSat support through `pycryptosat`; no SageQueue checkout or image is
 required. Installation downloads the base image and packages from their upstream
 registries.
 
-The defaults are Sage 10.7, container `sagepod`, and Jupyter at
+The defaults are Sage 10.8, container `sagepod`, and Jupyter at
 <http://localhost:8889>. Notebooks remain in `~/Jupyter` when the container stops.
-Sage 10.8 has also passed isolated container, solver, Jupyter, and persistence
+Sage 10.8 has passed isolated container, solver, Jupyter, and persistence
 checks with this setup; see the [validation record](docs/setup-review.md).
 
 ## Prerequisites
@@ -107,7 +107,7 @@ to the image builder, Compose, and container checks.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `SAGE_TAG` | `10.7` | Base-image tag and local-image version. |
+| `SAGE_TAG` | `10.8` | Base-image tag and local-image version. |
 | `PORT` | `8889` | Host port mapped to Jupyter's container port 8888. |
 | `CONTAINER_NAME` | `sagepod` | Container name used by every helper. |
 | `SAGEPOD_NETWORK_MODE` | `slirp4netns` | Podman network mode for builds and the running container. |
@@ -123,11 +123,11 @@ Keep the same overrides for later start, stop, and diagnostic commands. The help
 use Compose project `sagepod` and prefer `.venv/bin/podman-compose`, with a fallback
 to `podman-compose` on `PATH`. Setup always creates the repository's own `.venv`.
 
-The local image is `localhost/sagepod-sagemath:10.7-pycryptosat`, or the corresponding
-tag when `SAGE_TAG` is set. `Containerfile` installs `pycryptosat==5.11.21` in Sage's
-Python environment and checks that the package lies outside `/home/sage`, where
-bind mounts could hide it. It also tests a satisfiable and an unsatisfiable example
-through Sage's CryptoMiniSat interface.
+The local image is `localhost/sagepod-sagemath:10.8-pycryptosat`, or the corresponding
+tag when `SAGE_TAG` is set. `Containerfile` compiles `pycryptosat==5.11.21` from
+source in Sage's Python environment and checks that the package lies outside
+`/home/sage`, where bind mounts could hide it. It also tests a satisfiable and an
+unsatisfiable example through Sage's CryptoMiniSat interface.
 The image registers the Sage Jupyter kernel outside `/home/sage` and checks its
 discovery as the runtime user, so fresh data mounts still provide a Sage kernel.
 
