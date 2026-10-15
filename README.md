@@ -12,6 +12,10 @@ Sage 10.10 uses the upstream Debian Trixie image. See the
 [validation record](docs/setup-review.md) for container, solver, Jupyter, and
 persistence checks with this setup.
 
+The image build starts with upstream's prebuilt Sage and compiles CryptoMiniSat
+support from source inside the container image. The host Python environment runs
+Compose; Sage and its compiler toolchain are supplied by the container image.
+
 ## Prerequisites
 
 Run the commands below in Debian or Ubuntu as the normal Linux user. Use `sudo`
@@ -22,13 +26,20 @@ sudo apt update
 sudo apt install -y git podman slirp4netns uidmap acl python3-venv
 ```
 
+The recorded validation used Debian 13 under WSL2 on x86-64 (`linux/amd64`)
+with Podman 5.4.2. The base image download was about 4 GiB compressed; allow
+additional disk space for its unpacked layers and the SagePod image. Other hosts
+and architectures were outside those validation runs.
+
 Keep the checkout and data in the Linux filesystem, such as `~/src/sagepod` and
 `~/Jupyter`. The permission setup requires Unix ownership and access-control lists
 (ACLs); a Windows drive mounted under `/mnt/c` may not provide these semantics.
 
 ### WSL2
 
-Enable systemd in `/etc/wsl.conf`, preserving any existing sections:
+Use a WSL version that supports systemd (0.67.6 or newer). Enable systemd in
+`/etc/wsl.conf`, preserving any existing sections, as described in
+[Microsoft's WSL systemd instructions](https://learn.microsoft.com/en-us/windows/wsl/systemd):
 
 ```ini
 [boot]
@@ -41,7 +52,9 @@ From Windows PowerShell, shut down WSL and reopen the distribution:
 wsl.exe --shutdown
 ```
 
-Check Podman from the Linux shell:
+### Check rootless Podman
+
+On Linux or WSL2, check Podman from the Linux shell:
 
 ```bash
 podman ps
@@ -69,19 +82,40 @@ missing, and starts Jupyter. It then checks Sage's CryptoMiniSat backend and wri
 a temporary file in each container mount. It does not require an experiment script
 or copy notebooks into the data directories.
 
-Setup can be rerun. An existing image and usable `.venv` are reused. The permission
-step changes ownership and ACLs recursively in the six data directories; file
-contents and existing executable bits are preserved. Stop active notebook work
-before repairing permissions in an existing installation.
+Setup can be rerun. An existing image and usable `.venv` are reused. Rerunning
+setup repairs permissions again; configuration changes can also recreate the
+container. The permission step changes ownership and ACLs recursively in the six
+data directories; file contents and existing executable bits are preserved. Save
+active notebook work before rerunning setup or repairing permissions.
 
 Open the printed URL at <http://localhost:8889>. If the token has not appeared yet:
 
 ```bash
-podman logs --tail 2000 sagepod
+podman logs --tail 2000 "${CONTAINER_NAME:-sagepod}"
 ```
 
 Use the token from the Jupyter log with host port **8889**; port 8888 in the log
 is the port inside the container.
+
+To check the installation, run:
+
+```bash
+./check_cryptominisat_version.sh
+bin/verify.sh
+```
+
+The default image reports Sage 10.10, Python 3.13.5, and pycryptosat 5.11.21.
+In Jupyter, create a notebook using the **SageMath** kernel and run:
+
+```python
+from sage.env import SAGE_VERSION
+print(SAGE_VERSION)
+factor(2^10 - 1)
+```
+
+The version should be `10.10`, and the factorization should be `3 * 11 * 31`.
+This verifies Sage execution in the notebook. The command-line checks also test
+CryptoMiniSat and mount access.
 
 ## Start and stop
 
@@ -113,22 +147,43 @@ to the image builder, Compose, and container checks.
 | `CONTAINER_NAME` | `sagepod` | Container name used by every helper. |
 | `SAGEPOD_NETWORK_MODE` | `slirp4netns` | Podman network mode for builds and the running container. |
 
-For example:
+Save notebook work before changing configuration: the next startup can recreate
+the container. For example:
 
 ```bash
 export PORT=8890
 ./man-up.sh --no-follow
 ```
 
-Keep the same overrides for later start, stop, and diagnostic commands. The helpers
-use Compose project `sagepod` and prefer `.venv/bin/podman-compose`, with a fallback
-to `podman-compose` on `PATH`. Setup always creates the repository's own `.venv`.
+Keep the same overrides for later start, stop, and diagnostic commands. The
+helpers use Compose project `sagepod` and the same six data paths even when a
+custom container name or port is selected. A custom name alone does not create
+an independent installation.
+
+The helpers prefer `.venv/bin/podman-compose`, with a fallback to `podman-compose`
+on `PATH`. Setup creates the repository's own `.venv` when one is missing or
+unusable. Run `bin/venvfix.sh` to reinstall the pinned requirements after they
+change; a usable existing environment is otherwise reused.
+
+Use a port number for `PORT`. The default Compose entry, `${PORT:-8889}:8888`,
+publishes Jupyter on all host interfaces, subject to host/WSL networking and
+firewall settings. To bind only to the host's loopback interface, change the
+entry under `ports` in `podman-compose.yml` to:
+
+```yaml
+      - "127.0.0.1:${PORT:-8889}:8888"
+```
+
+Apply the change with `./man-down.sh` followed by `./man-up.sh --no-follow`. See
+[Podman's port-publishing documentation](https://docs.podman.io/en/latest/markdown/podman-run.1.html).
 
 The local image is `localhost/sagepod-sagemath:10.10-pycryptosat`, or the corresponding
-tag when `SAGE_TAG` is set. `Containerfile` compiles `pycryptosat==5.11.21` from
-source in Sage's Python environment and checks that the package lies outside
-`/home/sage`, where bind mounts could hide it. It also tests a satisfiable and an
-unsatisfiable example through Sage's CryptoMiniSat interface.
+tag when `SAGE_TAG` is set. During the image build, `Containerfile` compiles
+CryptoMiniSat support through `pycryptosat==5.11.21` from source in Sage's Python
+environment, using `--no-binary=pycryptosat`. The compiled package is installed
+in the image outside `/home/sage`, where bind mounts could hide it. Build checks
+run satisfiable and unsatisfiable examples through Sage's CryptoMiniSat interface
+as runtime user `1000:1000`.
 The image registers the Sage Jupyter kernel outside `/home/sage` and checks its
 discovery as the runtime user, so fresh data mounts still provide a Sage kernel.
 
@@ -151,14 +206,18 @@ user access through ACLs, including defaults inherited by new files. It requires
 no host `sage` account or group. `bin/show-mapped-ids.sh` prints the corresponding
 host IDs.
 
+Files saved in these six paths survive container removal. Changes elsewhere in
+the container's writable filesystem are discarded when the container is removed.
+Back up the host data directories separately when you need a recoverable copy.
+
 ## Rebuild or repair
 
 Rebuild the image after changing `Containerfile`:
 
 ```bash
-bin/build-image.sh
-./man-down.sh
-./man-up.sh --no-follow
+bin/build-image.sh &&
+  ./man-down.sh &&
+  ./man-up.sh --no-follow
 ```
 
 Building alone leaves the running container in place. Stop and start it to use the
@@ -168,11 +227,26 @@ different Sage version, export `SAGE_TAG` before the sequence above. The optiona
 the same value before starting it. The selected tag must exist in the upstream
 Debian Trixie image repository. Other base-image versions require validation.
 
-To upgrade an existing Sage 10.8 installation, save notebook work, update this
-checkout, and run the rebuild/stop/start sequence above. The six data paths stay
-the same. To return to an already-built Sage 10.8 image, stop SagePod and start it
-with `SAGE_TAG=10.8 ./man-up.sh --no-follow`. Retain that override for subsequent
-commands. Building Sage 10.8 with the new Trixie base has not been validated.
+To upgrade an existing Sage 10.8 installation, save notebook work and back up the
+host data directories. Then update the checkout and select 10.10 explicitly so
+an older exported `SAGE_TAG` cannot select the old image:
+
+```bash
+cd ~/src/sagepod &&
+  git pull --ff-only &&
+  export SAGE_TAG=10.10 &&
+  bin/build-image.sh &&
+  ./man-down.sh &&
+  ./man-up.sh --no-follow &&
+  ./check_cryptominisat_version.sh
+```
+
+Retain any custom `PORT` and `CONTAINER_NAME` values throughout the upgrade.
+The six data paths stay the same. To roll back, first check that
+`localhost/sagepod-sagemath:10.8-pycryptosat` is present with `podman image exists`.
+Then stop SagePod and start it with `SAGE_TAG=10.8 ./man-up.sh --no-follow`.
+Retain that override for subsequent commands. Building Sage 10.8 with the new
+Trixie base has not been validated.
 
 Rebuild the local Python environment:
 
@@ -200,6 +274,7 @@ checkout. After updating, run:
 
 ```bash
 cd ~/src/sagepod
+export SAGE_TAG=10.10
 bin/setup.sh
 ```
 
@@ -216,7 +291,7 @@ Do not delete the old shared image while SageQueue still needs it.
 Check the WSL systemd setting and the UID/GID maps shown under Prerequisites.
 If mappings are missing, configure subordinate IDs in `/etc/subuid` and
 `/etc/subgid` using the distribution's rootless Podman instructions. The
-[Podman rootless guide](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md)
+[Podman rootless guide](https://github.com/podman-container-tools/podman/blob/main/docs/tutorials/rootless_tutorial.md)
 explains these prerequisites.
 
 For a WSL installation with cgroup or event-logging errors, merge the following
@@ -261,9 +336,17 @@ namespace may require an administrator to correct their ownership first.
 
 ### Sage works but Jupyter is not reachable
 
-Check `podman ps` and `podman logs --tail 2000 sagepod`. Verify that the host port
-is free and use the configured host port in the browser. `bin/verify.sh` checks
-Sage and filesystem access; it is not an HTTP readiness check for Jupyter.
+Check the running container and its startup log:
+
+```bash
+podman ps
+podman logs --tail 2000 "${CONTAINER_NAME:-sagepod}"
+```
+
+Verify that the host port is free and use the configured host port in the browser.
+Jupyter may still be starting when `man-up.sh --no-follow` returns.
+`bin/verify.sh` checks Sage and filesystem access; it is not an HTTP readiness
+check for Jupyter.
 
 ## Repository contents
 
@@ -278,14 +361,16 @@ Sage and filesystem access; it is not an HTTP readiness check for Jupyter.
 | [`compiling_sage/`](compiling_sage/README.md) | Separate native Sage 10.10 source-build helpers and instructions. |
 | [Setup provenance](docs/setup-provenance.md) | Sources and changes made when incorporating SageQueue's setup. |
 
-Run the host-side checks with:
+After setup, run the host-side checks in the repository's Python environment:
 
 ```bash
-python3 -m unittest discover -s tests -v
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
 These checks use command substitutes for Podman and native build/package commands.
 With `setfacl` installed, they also exercise inherited ACLs on temporary files.
+Using `.venv/bin/python` includes the real pinned Compose rendering check. To run
+the checks before building an image, create `.venv` with `bin/venvfix.sh` first.
 A complete container installation check requires `bin/setup.sh` on a supported
 rootless Podman host, followed by opening Jupyter and evaluating a Sage notebook
 cell.
