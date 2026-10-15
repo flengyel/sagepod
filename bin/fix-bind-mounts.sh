@@ -22,7 +22,12 @@ podman unshare bash -s -- "${MOUNT_DIRS[@]}" <<'PERMISSIONS'
 set -euo pipefail
 for dir in "$@"; do
   printf 'Fixing permissions: %s\n' "$dir"
-  setfacl -R -P -m 'u:0:rwX' -- "$dir"
+  # Classify by mode before changing ACLs. setfacl's X can consider inherited,
+  # masked-off execute entries that chmod must not turn into executable files.
+  find "$dir" ! -type l \( -type d -o -perm /111 \) \
+    -exec setfacl -m 'u:0:rwx,m::rwx' -- {} +
+  find "$dir" ! -type d ! -type l ! -perm /111 \
+    -exec setfacl -m 'u:0:rw-,m::rw-' -- {} +
   chown -hR 1000:1000 -- "$dir"
   chmod -R u+rwX,g+rwX,o-rwx -- "$dir"
   find "$dir" -type d -exec chmod g+s -- {} +

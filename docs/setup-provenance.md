@@ -26,7 +26,10 @@ SageQueue checkout, or SageQueue image is needed by the new setup.
 The upstream DOT_SAGE seeding step is replaced by an image-build check: the installed
 `pycryptosat` module must lie outside `/home/sage`. A base-image change that violates
 this condition fails the build instead of silently relying on packages copied into
-host state. The runtime check exercises the solver with all mounts attached.
+host state. Installation runs as root inside the image build because the base
+image's Sage environment is root-owned. The module-location and solver checks run
+as runtime user `1000:1000`. The runtime check exercises the solver with all mounts
+attached.
 
 The original SagePod `.sagepod-local` mount remains attached to `/home/sage/.local`.
 It has not been moved to `/home/sage/.local/share`, which would reinterpret existing

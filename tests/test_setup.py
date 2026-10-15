@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 
 name = Path(sys.argv[0]).name
@@ -46,6 +48,12 @@ elif name == "podman":
         state.touch()
     if args and args[0] == "logs":
         print("http://localhost:8888/tree?token=abc123", file=sys.stderr)
+    if args[:1] == ["unshare"] and os.environ.get("TEST_REAL_PERMISSIONS"):
+        sys.exit(subprocess.run(args[1:], input=record["stdin"], text=True).returncode)
+elif name == "setfacl" and os.environ.get("TEST_REAL_PERMISSIONS"):
+    # Map namespace root to this process's UID, including in restricted sandboxes.
+    mapped = [arg.replace("u:0:", f"u:{os.getuid()}:") for arg in args]
+    sys.exit(subprocess.run([os.environ["TEST_SETFACL"], *mapped]).returncode)
 elif name in ("python", "python3", "test-python"):
     if args[:2] == ["-m", "venv"]:
         venv = Path(args[2])
@@ -135,6 +143,35 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(sum(c["args"][:1] == ["build"] for c in self.calls("podman")), 1)
         self.assertEqual(sum(c["args"][:2] == ["-m", "venv"] for c in self.calls()), 1)
         self.assertFalse(list(self.home.rglob(".sagepod-host-check.*")))
+
+    @unittest.skipUnless(shutil.which("setfacl"), "Install acl to test inherited permission masks")
+    def test_permission_repair_preserves_execute_status_with_inherited_acls(self):
+        # Run the helper's real ACL/chmod operations. Namespace entry, UID mapping,
+        # and ownership changes are substituted, so no subordinate IDs are needed.
+        setfacl = shutil.which("setfacl")
+        self.make_mock(self.mockbin / "chown")
+        files = []
+        for name in ("Jupyter", ".jupyter", ".sagepod-dot_sage", ".sagepod-local",
+                     ".sagepod-config", ".sagepod-cache"):
+            mount = self.home / name
+            mount.mkdir()
+            subprocess.run([setfacl, "-m",
+                f"d:u::rwx,d:u:{os.getuid()}:rwx,d:g::rwx,d:m::rwx,d:o::---",
+                str(mount)], check=True)
+            nested = mount / "nested"
+            nested.mkdir(mode=0o700)
+            for filename, mode in (("data", 0o600), ("executable", 0o700)):
+                path = nested / filename
+                path.write_text("preserve contents\n")
+                path.chmod(mode)
+                files.append((path, bool(mode & stat.S_IXUSR)))
+        for _ in range(2):
+            self.run_script("bin/fix-bind-mounts.sh", TEST_REAL_PERMISSIONS="1",
+                            TEST_SETFACL=setfacl)
+            for path, executable in files:
+                with self.subTest(path=path, executable=executable):
+                    self.assertEqual(path.read_text(), "preserve contents\n")
+                    self.assertEqual(bool(path.stat().st_mode & 0o111), executable)
 
     def test_overrides_reach_builder_compose_and_verifier(self):
         result = self.run_script("bin/setup.sh", SAGE_TAG="10.8", PORT="8890",

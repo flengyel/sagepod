@@ -10,7 +10,6 @@ RUN mkdir -p /home/sage /sage && chown 1000:1000 /home/sage /sage
 ENV HOME=/home/sage
 ENV DOT_SAGE=/home/sage/.sage
 
-USER 1000:1000
 WORKDIR /sage
 RUN if [ ! -x /sage/sage ]; then \
       if command -v sage >/dev/null 2>&1; then \
@@ -20,8 +19,10 @@ RUN if [ ! -x /sage/sage ]; then \
       fi; \
     fi
 
-# Install in Sage's environment, outside the bind-mounted home directories.
+# The base image's Sage environment is not writable by runtime user 1000.
+# Install as image root, outside the bind-mounted home, then test as that user.
 RUN ./sage -pip install --no-user --no-binary=pycryptosat --force-reinstall pycryptosat==5.11.21
+USER 1000:1000
 RUN ./sage -python -c "from pathlib import Path; import pycryptosat; \
     assert not Path(pycryptosat.__file__).resolve().is_relative_to('/home/sage'), 'pycryptosat would be hidden by the home mounts'"
 RUN ./sage -python -c "import sage.all; from sage.sat.solvers.cryptominisat import CryptoMiniSat; \

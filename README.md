@@ -272,7 +272,8 @@ Run the host-side checks with:
 python3 -m unittest discover -s tests -v
 ```
 
-These checks use command substitutes for Podman. A complete installation check
+These checks use command substitutes for Podman. With `setfacl` installed, they
+also exercise inherited ACLs on temporary files. A complete installation check
 requires `bin/setup.sh` on a supported rootless Podman host, followed by opening
 Jupyter and evaluating a Sage notebook cell.
 
