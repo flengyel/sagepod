@@ -31,6 +31,10 @@ image's Sage environment is root-owned. The module-location and solver checks ru
 as runtime user `1000:1000`. The runtime check exercises the solver with all mounts
 attached.
 
+Sage's Jupyter kernelspec is also registered in Sage's environment during the
+image build. A check as `1000:1000` requires it to be discoverable outside
+`/home/sage`. This supplies a Sage kernel when `.sagepod-local` is initially empty.
+
 The original SagePod `.sagepod-local` mount remains attached to `/home/sage/.local`.
 It has not been moved to `/home/sage/.local/share`, which would reinterpret existing
 host data. Shared notebook and Jupyter configuration mounts use the shared SELinux

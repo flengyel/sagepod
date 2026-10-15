@@ -8,6 +8,8 @@ registries.
 
 The defaults are Sage 10.7, container `sagepod`, and Jupyter at
 <http://localhost:8889>. Notebooks remain in `~/Jupyter` when the container stops.
+Sage 10.8 has also passed isolated container, solver, Jupyter, and persistence
+checks with this setup; see the [validation record](docs/setup-review.md).
 
 ## Prerequisites
 
@@ -126,6 +128,8 @@ tag when `SAGE_TAG` is set. `Containerfile` installs `pycryptosat==5.11.21` in S
 Python environment and checks that the package lies outside `/home/sage`, where
 bind mounts could hide it. It also tests a satisfiable and an unsatisfiable example
 through Sage's CryptoMiniSat interface.
+The image registers the Sage Jupyter kernel outside `/home/sage` and checks its
+discovery as the runtime user, so fresh data mounts still provide a Sage kernel.
 
 ## Persistent data
 

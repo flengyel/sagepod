@@ -136,8 +136,9 @@ the executed notebook and redacted logs remain locally under
 - The host already cached the upstream Sage base image and the apt dependency
   layer. The solver source was downloaded and compiled during validation, but a
   completely empty-cache registry pull and apt installation were not repeated.
-- The tested configuration is Sage 10.7 on this WSL2/ext4 host with SELinux
-  disabled. Other Sage versions, hosts, and SELinux relabeling remain untested.
+- This initial validation covered Sage 10.7 on this WSL2/ext4 host with SELinux
+  disabled. The subsequent Sage 10.8 validation is recorded below. Other hosts
+  and SELinux relabeling remain untested.
 - Jupyter was exercised through authenticated HTTP and kernel WebSockets. No
   graphical notebook UI, Windows-browser port forwarding, or rendered Markdown
   was inspected.
@@ -148,3 +149,69 @@ the executed notebook and redacted logs remain locally under
 - No preexisting user notebooks were available; persistence was demonstrated with
   the generated notebook and controlled files in all six mounts. The separate
   source-build helpers under `compiling_sage/` were not validated.
+
+## Sage 10.8 compatibility validation — 2026-10-15
+
+Sage 10.8 passed an isolated compatibility test with Python 3.12.5 and the existing
+`pycryptosat==5.11.21` pin after two image-recipe repairs. The starting checkout was
+the merged `main` commit `c0cad3b168a63156b9cd22f5be2043bfc60de214`; the repairs and
+this record are on `codex/sage-10-8-validation`. The default remains Sage 10.7.
+
+### Isolation and build repairs
+
+The test used rootless Podman 5.4.2 on the same Debian 13.7/WSL2 host, Compose
+project `sagepod108validation`, container `sagepod108-validation`, and host port
+`127.0.0.1:8890`. The repository's Compose configuration was rendered with Sage
+10.8 and the test container name, then its six host sources were replaced with
+temporary directories. Production data directories were not mounted. The actual
+permission-helper body was run in `podman unshare` against these temporary paths.
+The full production `bin/setup.sh` was not invoked for this isolated test.
+
+The production `sagepod` container was absent at the start and remained absent.
+SageQueue's `sagemath` container retained its ID, image, PID, and start time; all
+eight worker PIDs and process start times and the other persistent unit states
+matched the baseline throughout. Its existing recovery timer continued normally.
+The local untracked `txt` file was preserved.
+
+Two failures were found before notebook validation could pass:
+
+1. `build-essential` required `dpkg-dev` and an updated `libdpkg-perl`, whose
+   version 1.20.14 archives returned HTTP 404 from Debian security repositories.
+   Refreshing all indexes over HTTPS reproduced the failure. The recipe now
+   requests `make gcc g++ cmake pkg-config` directly. These required build tools
+   were already present in the upstream image, and the apt step succeeded.
+2. With fresh data mounts, Jupyter listed only `python3`; no Sage kernelspec was
+   discoverable. The image now calls `SageKernelSpec.update()` as build root to
+   install the kernel under Sage's Python prefix. A build check as runtime user
+   `1000:1000` requires the kernel to be discoverable, use language `sage`, and
+   reside outside `/home/sage`. The repaired image was tested with six newly
+   prepared temporary mounts, without a preexisting Sage kernelspec.
+
+### Actual results
+
+| Check | Result |
+| --- | --- |
+| `bin/build-image.sh --sage-tag 10.8` | Passed after the repairs. The upstream 10.8 image was pulled, and `pycryptosat==5.11.21` was downloaded and compiled from source. Subsequent recipe checks reused build layers. |
+| Final image | `localhost/sagepod-sagemath:10.8-pycryptosat`, ID `312f10bb456fd26f5ea62d549a8bfdef4e4d113c48f50c591ec2bcd25d50835b`. |
+| Runtime identity | Sage 10.8, Python 3.12.5, pycryptosat 5.11.21, UID/GID `1000:1000`; all six mounts and the test project label matched the isolated configuration. |
+| `bin/verify.sh` | Passed using `CONTAINER_NAME=sagepod108-validation`, including SAT/UNSAT and all six writable mounts, before and after recreation. |
+| Additional Sage calculations | Integer-matrix determinant, polynomial arithmetic over GF(2), and arithmetic in GF(256) passed. |
+| Additional solver checks | XOR SAT and UNSAT cases passed through `CryptoMiniSat`; SAT and UNSAT also passed through `SAT(solver='cryptominisat')`. |
+| Host/container access | Both sides created, read, and edited files in every mount, including inherited ACLs on new directories and files. Nested 0600 and 0700 fixtures retained their contents and executable status. |
+| Jupyter HTTP | Authenticated HTTP 200 for `/api/status` and `/tree` through both `localhost:8890` and `127.0.0.1:8890`. |
+| Sage notebook | A `sagemath` kernel evaluated `factor(2^10 - 1)` as `3 * 11 * 31` and passed CryptoMiniSat SAT/UNSAT assertions. Both cell outputs were saved and read from the host. |
+| Container removal/recreation | All 25 notebook/probe SHA-256 checksums matched while the container was down and after recreation. The new container used the same image; the saved notebook reopened and both cells ran again. |
+| Host regression suite | `.venv/bin/python -m unittest discover -s tests -v`: all 19 tests passed, none skipped, after the image-recipe repairs. `pip check`, local documentation links, and whitespace checks also passed. |
+
+The solver module remained outside the mounts at
+`/sage/local/var/lib/sage/venv-python3.12.5/lib/python3.12/site-packages/pycryptosat.cpython-312-x86_64-linux-gnu.so`.
+Validation sessions and kernels were shut down after notebook execution. The test
+container and its Compose pod were removed after testing; the image, executed
+notebook, temporary test data, scripts, and redacted logs are retained locally
+under `/tmp/sagepod-108-20261015/`.
+
+This validates the tested SagePod operations with Sage 10.8, rather than every
+Sage API or an in-place migration of existing user notebooks and configuration.
+The graphical notebook UI, Windows-browser forwarding, SELinux relabeling, and
+other hosts were not tested. The complete Sage 10.7 rebuild was not repeated with
+the modified recipe; the earlier 10.7 results above predate these two repairs.
