@@ -9,7 +9,6 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
-bin/
 develop-eggs/
 dist/
 downloads/
@@ -117,3 +116,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Old in-place venv tools; keep the tracked setup scripts.
+bin/*
+!bin/*.sh
