@@ -1,7 +1,12 @@
 # SagePod
 
-SagePod runs SageMath and Jupyter in a rootless Podman container on Linux or
-WSL2. This repository contains the setup scripts and image definition, including
+SagePod is a companion to
+[Theorem Terminal](https://github.com/flengyel/theorem_terminal), providing a
+SageMath and Jupyter environment in a rootless Podman container on Linux or WSL2.
+It also stands on its own: the setup and runtime commands below work independently
+of a Theorem Terminal installation.
+
+This repository contains the setup scripts and image definition, including
 CryptoMiniSat support through `pycryptosat`; no SageQueue checkout or image is
 required. Installation downloads the base image and packages from their upstream
 registries.
