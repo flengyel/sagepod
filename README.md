@@ -1,10 +1,7 @@
 # SagePod
 
-SagePod is a companion to
-[Theorem Terminal](https://github.com/flengyel/theorem_terminal), providing a
-SageMath and Jupyter environment in a rootless Podman container on Linux or WSL2.
-It also stands on its own: the setup and runtime commands below work independently
-of a Theorem Terminal installation.
+SagePod runs SageMath and Jupyter in a rootless Podman container directly on
+Linux, or in a Linux distribution under WSL2 on Windows. WSL is optional.
 
 This repository contains the setup scripts and image definition, including
 CryptoMiniSat support through `pycryptosat`; no SageQueue checkout or image is
@@ -21,6 +18,31 @@ The image build starts with upstream's prebuilt Sage and compiles CryptoMiniSat
 support from source inside the container image. The host Python environment runs
 Compose; Sage and its compiler toolchain are supplied by the container image.
 
+## Linux compatibility
+
+On native Debian or Ubuntu, install the host packages and configure rootless
+Podman as described below, then run `bin/setup.sh`. The same image-build,
+startup, shutdown, and verification commands apply on native Linux and WSL2.
+Only the WSL2 subsection and the optional Windows-browser opening feature are
+specific to Windows; skip those on native Linux.
+
+The scripts use Bash, standard Linux utilities, Python, ACL tools, and rootless
+Podman. Sage and its compiler toolchain come from the Debian Trixie container
+image, so a native Linux host does not need its own Sage installation.
+
+### Tested configurations
+
+| Host environment | Validation status |
+| --- | --- |
+| Native Debian or Ubuntu, without WSL | Package and setup instructions are provided. A complete native-host image build and runtime test has not yet been recorded. |
+| Debian 13.7 under WSL2, x86-64, rootless Podman 5.4.2, ext4 | Build, CryptoMiniSat, Jupyter Sage kernels, mount access, and persistence checks passed on 2026-10-15; see the [validation record](docs/setup-review.md). |
+
+Other Linux distributions need equivalent host packages and rootless Podman
+configuration; see [Podman's distribution-specific installation instructions](https://podman.io/docs/installation#installing-on-linux).
+SagePod has no recorded build and runtime validation on those distributions or
+on other CPU architectures. The optional [native Sage source build](compiling_sage/README.md)
+is a separate workflow from building this container image.
+
 ## Prerequisites
 
 Run the commands below in Debian or Ubuntu as the normal Linux user. Use `sudo`
@@ -31,10 +53,8 @@ sudo apt update
 sudo apt install -y git podman slirp4netns uidmap acl python3-venv
 ```
 
-The recorded validation used Debian 13 under WSL2 on x86-64 (`linux/amd64`)
-with Podman 5.4.2. The base image download was about 4 GiB compressed; allow
-additional disk space for its unpacked layers and the SagePod image. Other hosts
-and architectures were outside those validation runs.
+The validated base image download was about 4 GiB compressed; allow additional
+disk space for its unpacked layers and the SagePod image.
 
 Keep the checkout and data in the Linux filesystem, such as `~/src/sagepod` and
 `~/Jupyter`. The permission setup requires Unix ownership and access-control lists
@@ -42,9 +62,15 @@ Keep the checkout and data in the Linux filesystem, such as `~/src/sagepod` and
 
 ### WSL2
 
-Use a WSL version that supports systemd (0.67.6 or newer). Enable systemd in
-`/etc/wsl.conf`, preserving any existing sections, as described in
-[Microsoft's WSL systemd instructions](https://learn.microsoft.com/en-us/windows/wsl/systemd):
+Use a WSL version that supports systemd (0.67.6 or newer). On Debian or Ubuntu,
+ensure the systemd packages are installed:
+
+```bash
+sudo apt install -y systemd systemd-sysv
+```
+
+Enable systemd in `/etc/wsl.conf`, preserving any existing sections, as described
+in [Microsoft's WSL systemd instructions](https://learn.microsoft.com/en-us/windows/wsl/systemd):
 
 ```ini
 [boot]
@@ -109,7 +135,8 @@ To check the installation, run:
 bin/verify.sh
 ```
 
-The default image reports Sage 10.10, Python 3.13.5, and pycryptosat 5.11.21.
+The recorded Sage 10.10 image validation reported Python 3.13.5 and pycryptosat
+5.11.21. The commands above report the versions in the running container.
 In Jupyter, create a notebook using the **SageMath** kernel and run:
 
 ```python
@@ -232,9 +259,9 @@ different Sage version, export `SAGE_TAG` before the sequence above. The optiona
 the same value before starting it. The selected tag must exist in the upstream
 Debian Trixie image repository. Other base-image versions require validation.
 
-To upgrade an existing Sage 10.8 installation, save notebook work and back up the
-host data directories. Then update the checkout and select 10.10 explicitly so
-an older exported `SAGE_TAG` cannot select the old image:
+To update an existing installation to Sage 10.10, save notebook work and back up
+the host data directories. Then update the checkout and select SagePod's default
+version explicitly so an older exported `SAGE_TAG` cannot select another image:
 
 ```bash
 cd ~/src/sagepod &&
@@ -246,12 +273,8 @@ cd ~/src/sagepod &&
   ./check_cryptominisat_version.sh
 ```
 
-Retain any custom `PORT` and `CONTAINER_NAME` values throughout the upgrade.
-The six data paths stay the same. To roll back, first check that
-`localhost/sagepod-sagemath:10.8-pycryptosat` is present with `podman image exists`.
-Then stop SagePod and start it with `SAGE_TAG=10.8 ./man-up.sh --no-follow`.
-Retain that override for subsequent commands. Building Sage 10.8 with the new
-Trixie base has not been validated.
+Retain any custom `PORT`, `CONTAINER_NAME`, and `SAGEPOD_NETWORK_MODE` values
+throughout the update. The six data paths stay the same.
 
 Rebuild the local Python environment:
 
@@ -293,8 +316,8 @@ Do not delete the old shared image while SageQueue still needs it.
 
 ### Podman cannot run as the normal user
 
-Check the WSL systemd setting and the UID/GID maps shown under Prerequisites.
-If mappings are missing, configure subordinate IDs in `/etc/subuid` and
+Check the UID/GID maps shown under Prerequisites. On WSL2, also check the systemd
+setting. If mappings are missing, configure subordinate IDs in `/etc/subuid` and
 `/etc/subgid` using the distribution's rootless Podman instructions. The
 [Podman rootless guide](https://github.com/podman-container-tools/podman/blob/main/docs/tutorials/rootless_tutorial.md)
 explains these prerequisites.

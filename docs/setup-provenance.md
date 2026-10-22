@@ -8,9 +8,9 @@ The SagePod starting point was
 Both repositories carry the same MIT license and copyright notice, retained in
 `LICENSE`.
 
-The current SagePod release uses Sage 10.10 on Debian Trixie with source-built
+The current SagePod default is Sage 10.10 on Debian Trixie with source-built
 `pycryptosat==5.11.21`. See the [validation record](setup-review.md) for the
-upgrade from the earlier Bullseye-based Sage 10.8 image.
+image build, solver, Jupyter, and persistence checks on Debian 13 under WSL2.
 
 | SageQueue source | SagePod adaptation |
 | --- | --- |
