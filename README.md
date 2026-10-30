@@ -342,6 +342,28 @@ events_logger="file"
 default_rootless_network_cmd="slirp4netns"
 ```
 
+### Following logs fails with a journald/events-backend error
+
+The message `using --follow with the journald --log-driver but without the
+journald --events-backend (file) is not supported` concerns log following; the
+SagePod container and Jupyter remain running.
+
+SagePod explicitly selects Podman's `k8s-file` container log driver, which supports
+following logs with the `file` events backend. Existing containers retain the log
+driver chosen when they were created. Save notebook work, then update the checkout
+and recreate the container to apply this setting:
+
+```bash
+git pull --ff-only &&
+  ./man-down.sh &&
+  ./man-up.sh
+```
+
+The existing image and six persistent data directories are retained. Running
+kernels end when the container is removed. To keep the current session running,
+continue using its Jupyter URL; `bin/jupyter-url.sh` prints that URL without
+following logs or restarting the container.
+
 ### `podman-compose` is missing or broken
 
 Run `bin/venvfix.sh`, then retry startup. Install `python3-venv` if Python cannot

@@ -362,6 +362,24 @@ class SetupTests(unittest.TestCase):
 @unittest.skipUnless(importlib.util.find_spec("podman_compose"),
                      "Install requirements.txt to test real Compose rendering")
 class ComposeTests(unittest.TestCase):
+    def test_container_creation_selects_file_logging(self):
+        # Use the real pinned Compose translator; substitute only Podman queries.
+        with tempfile.TemporaryDirectory(prefix="sagepod logging ") as directory:
+            mockbin = Path(directory) / "mockbin"
+            mockbin.mkdir()
+            podman = mockbin / "podman"
+            podman.write_text("#!/bin/sh\nexit 0\n")
+            podman.chmod(0o755)
+            env = {k: v for k, v in os.environ.items() if k not in
+                   ("SAGE_TAG", "PORT", "CONTAINER_NAME", "SAGEPOD_NETWORK_MODE")}
+            env.update(HOME=directory, PATH=f"{mockbin}:{env['PATH']}")
+            result = subprocess.run([sys.executable, "-m", "podman_compose",
+                "--verbose", "--dry-run", "-p", "sagepod", "-f",
+                str(SOURCE / "podman-compose.yml"), "up", "-d"],
+                cwd=directory, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("--log-driver=k8s-file", result.stdout + result.stderr)
+
     def test_default_and_custom_configuration(self):
         import yaml
         for overrides, tag, port, container in [({}, "10.10", "8889", "sagepod"),
@@ -380,6 +398,7 @@ class ComposeTests(unittest.TestCase):
                 self.assertEqual(service["image"], f"localhost/sagepod-sagemath:{tag}-pycryptosat")
                 self.assertEqual(service["container_name"], container)
                 self.assertEqual(service["ports"], [f"{port}:8888"])
+                self.assertEqual(service["logging"], {"driver": "k8s-file"})
                 self.assertIn(f"--ServerApp.custom_display_url=http://localhost:{port}", service["command"][-1])
                 self.assertIn("--port-retries=0", service["command"][-1])
                 self.assertEqual(len(service["volumes"]), 6)
