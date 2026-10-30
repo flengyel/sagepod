@@ -12,6 +12,7 @@ import shutil
 import stat
 import subprocess
 import sys
+from urllib.parse import urlencode
 import tempfile
 import unittest
 
@@ -46,8 +47,16 @@ elif name == "podman":
         sys.exit(0 if state.exists() else 1)
     if args and args[0] == "build":
         state.touch()
-    if args and args[0] == "logs":
-        print("http://localhost:8888/tree?token=abc123", file=sys.stderr)
+    if args and args[0] == "logs" and args[1:3] != ["--tail", "0"]:
+        print("http://127.0.0.1:8888/tree?token=obsolete", file=sys.stderr)
+    if args and args[0] == "port":
+        print(os.environ.get("TEST_PORT_OUTPUT", "0.0.0.0:" + os.environ.get("PORT", "8889")))
+    if args[:2] == ["exec", "-i"] and "--port" in args:
+        if fail == "jupyter":
+            sys.exit(19)
+        from urllib.parse import urlencode
+        port = args[args.index("--port") + 1]
+        print(f"http://localhost:{port}/tree?" + urlencode({"token": os.environ.get("TEST_TOKEN", "abc123")}))
     if args[:1] == ["unshare"] and os.environ.get("TEST_REAL_PERMISSIONS"):
         sys.exit(subprocess.run(args[1:], input=record["stdin"], text=True).returncode)
 elif name == "setfacl" and os.environ.get("TEST_REAL_PERMISSIONS"):
@@ -228,6 +237,60 @@ class SetupTests(unittest.TestCase):
         self.assertNotIn("Jupyter:", result.stdout)
         self.assertFalse(any(c["args"][:1] == ["logs"] for c in self.calls("podman")))
 
+    def test_login_uses_current_server_and_published_port_instead_of_logs(self):
+        self.local_compose()
+        self.image.touch()
+        result = self.run_script("man-up.sh", "--no-follow", PORT="8890",
+                                 TEST_PORT_OUTPUT="0.0.0.0:9010\n[::]:9010",
+                                 TEST_TOKEN="current-token/+=")
+        url = "http://localhost:9010/tree?" + urlencode({"token": "current-token/+="})
+        self.assertIn(url, result.stdout)
+        self.assertNotIn("obsolete", result.stdout)
+        self.assertFalse(any(c["args"][:1] == ["logs"] for c in self.calls("podman")))
+        lookup = next(c for c in self.calls("podman") if "--port" in c["args"])
+        compile(lookup["stdin"], "jupyter-url-stdin", "exec")
+
+    def test_open_uses_the_current_authenticated_url(self):
+        self.local_compose()
+        self.image.touch()
+        self.make_mock(self.mockbin / "powershell.exe")
+        self.run_script("man-up.sh", "--no-follow", "--open", TEST_PORT_OUTPUT="0.0.0.0:9010")
+        call = self.calls("powershell.exe")[0]
+        self.assertEqual(call["args"], ["-NoProfile", "-Command",
+                                       "Start-Process 'http://localhost:9010/tree?token=abc123'"])
+
+    def test_follow_does_not_replay_old_internal_urls(self):
+        self.local_compose()
+        self.image.touch()
+        result = self.run_script("man-up.sh")
+        self.assertIn("Jupyter login: http://localhost:8889/tree?token=abc123", result.stdout)
+        self.assertNotIn("obsolete", result.stdout + result.stderr)
+        logs = [c["args"] for c in self.calls("podman") if c["args"][:1] == ["logs"]]
+        self.assertEqual(logs, [["logs", "--tail", "0", "-f", "sagepod"]])
+
+    def test_failed_jupyter_lookup_does_not_print_or_open_a_login_url(self):
+        self.local_compose()
+        self.image.touch()
+        self.make_mock(self.mockbin / "powershell.exe")
+        result = self.run_script("man-up.sh", "--no-follow", "--open",
+                                 success=False, TEST_FAIL="jupyter")
+        self.assertNotIn("Jupyter login:", result.stdout)
+        self.assertFalse(self.calls("powershell.exe"))
+
+    def test_login_url_can_be_obtained_without_restarting(self):
+        result = self.run_script("bin/jupyter-url.sh", "--wait", "0")
+        self.assertEqual(result.stdout.strip(), "http://localhost:8889/tree?token=abc123")
+        self.assertEqual([c["args"][0] for c in self.calls("podman")], ["port", "exec"])
+        self.assertFalse(self.calls("podman-compose"))
+
+    def test_missing_or_ambiguous_port_mapping_does_not_guess(self):
+        for mapping in ("", "0.0.0.0:8889\n[::]:8890"):
+            with self.subTest(mapping=mapping):
+                result = self.run_script("bin/jupyter-url.sh", success=False,
+                                         TEST_PORT_OUTPUT=mapping)
+                self.assertNotIn("http://", result.stdout)
+        self.assertFalse(any(c["args"][:1] == ["exec"] for c in self.calls("podman")))
+
     def test_compose_failure_is_reported(self):
         self.local_compose()
         self.image.touch()
@@ -289,6 +352,7 @@ class SetupTests(unittest.TestCase):
                              ("man-up.sh", ["--typo"]),
                              ("man-down.sh", ["--typo"]),
                              ("bin/setup.sh", ["--typo"]),
+                             ("bin/jupyter-url.sh", ["--wait", "invalid"]),
                              ("bin/venvfix.sh", ["python3", "extra"])]:
             with self.subTest(script=script):
                 self.run_script(script, *args, success=False)
@@ -316,6 +380,8 @@ class ComposeTests(unittest.TestCase):
                 self.assertEqual(service["image"], f"localhost/sagepod-sagemath:{tag}-pycryptosat")
                 self.assertEqual(service["container_name"], container)
                 self.assertEqual(service["ports"], [f"{port}:8888"])
+                self.assertIn(f"--ServerApp.custom_display_url=http://localhost:{port}", service["command"][-1])
+                self.assertIn("--port-retries=0", service["command"][-1])
                 self.assertEqual(len(service["volumes"]), 6)
                 self.assertIn(f"{directory}/.sagepod-local:/home/sage/.local:Z,U", service["volumes"])
                 self.assertNotIn("sagequeue", result.stdout)

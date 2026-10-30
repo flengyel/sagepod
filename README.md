@@ -119,14 +119,21 @@ container. The permission step changes ownership and ACLs recursively in the six
 data directories; file contents and existing executable bits are preserved. Save
 active notebook work before rerunning setup or repairing permissions.
 
-Open the printed URL at <http://localhost:8889>. If the token has not appeared yet:
+Open the printed **Jupyter login** URL. It uses `localhost`, the running
+container's published host port (normally **8889**), and its current token.
+Startup waits up to 30 seconds for Jupyter and checks token authentication.
+To obtain the URL again without restarting the container or its kernels:
 
 ```bash
-podman logs --tail 2000 "${CONTAINER_NAME:-sagepod}"
+bin/jupyter-url.sh
 ```
 
-Use the token from the Jupyter log with host port **8889**; port 8888 in the log
-is the port inside the container.
+Use this URL in the Windows browser under WSL2 as well as on native Linux.
+Port **8888** is internal to the container. Jupyter may also print internal
+addresses in its logs; a token from SagePod will not authenticate to another
+Jupyter server reached at the wrong host port. If Jupyter is configured to use
+only a password, the helper prints its login URL and reports that a password is
+required.
 
 To check the installation, run:
 
@@ -157,8 +164,9 @@ another directory.
 | Command | Action |
 | --- | --- |
 | `./man-up.sh --no-follow` | Start Jupyter, run checks, and print its URL. Build the image if it is missing. |
-| `./man-up.sh` | Start and check Jupyter, then follow logs. Ctrl-C stops following logs; the container keeps running. |
-| `./man-up.sh --no-follow --open` | Also open the URL in the Windows browser, when PowerShell is available. |
+| `./man-up.sh` | Start and check Jupyter, print its login URL, then follow new log messages without replaying earlier startup URLs. Ctrl-C stops following logs; the container keeps running. |
+| `./man-up.sh --no-follow --open` | Also open the current login URL, including its token, in the Windows browser when PowerShell is available. |
+| `bin/jupyter-url.sh` | Print the current login URL using the actual published port, without restarting the container. |
 | `./man-down.sh` | Stop and remove the container; retain the image and host data. |
 | `./run-bash.sh` | Open a shell in the running SagePod container. |
 | `bin/verify.sh` | Report Sage/Python/solver versions and check all six container mounts and the solver. |
@@ -371,10 +379,31 @@ podman ps
 podman logs --tail 2000 "${CONTAINER_NAME:-sagepod}"
 ```
 
-Verify that the host port is free and use the configured host port in the browser.
-Jupyter may still be starting when `man-up.sh --no-follow` returns.
-`bin/verify.sh` checks Sage and filesystem access; it is not an HTTP readiness
-check for Jupyter.
+Verify that the host port is free. Startup checks Sage and the mounts with
+`bin/verify.sh`, then waits for Jupyter with `bin/jupyter-url.sh`. If Jupyter is
+still starting after that wait, inspect its logs and rerun `bin/jupyter-url.sh`.
+The URL helper checks Jupyter inside the container; browser access also depends
+on host networking and, under WSL2, Windows localhost forwarding.
+
+### Jupyter rejects a token
+
+Obtain the current login URL with `bin/jupyter-url.sh` and open that complete URL.
+The helper reads the running server's information and checks its token against
+Jupyter, instead of extracting a token from accumulated logs. It discovers the
+published host port from Podman, so it also works when the current shell's `PORT`
+differs from the running container's mapping.
+
+To inspect the mapping and server information directly:
+
+```bash
+podman port "${CONTAINER_NAME:-sagepod}" 8888/tcp
+podman exec "${CONTAINER_NAME:-sagepod}" /sage/sage -python -m jupyter server list
+```
+
+For example, `0.0.0.0:8889` means browser access uses `http://localhost:8889`,
+even when the server list shows a container hostname and port 8888. Use the token
+from that server at the published host port. A token can change when Jupyter
+restarts. Cookies must be enabled for the browser to retain the login.
 
 ## Repository contents
 
@@ -384,7 +413,7 @@ check for Jupyter.
 | `bin/setup.sh` | Prepare the installation and start it. |
 | `bin/build-image.sh`, `bin/venvfix.sh` | Build the image and host Python environment. |
 | `bin/fix-bind-mounts.sh`, `bin/show-mapped-ids.sh` | Manage and inspect rootless mount permissions. |
-| `bin/verify.sh`, top-level helpers | Start, stop, and check the container. |
+| `bin/verify.sh`, `bin/jupyter-url.sh`, top-level helpers | Start, stop, and check the container; obtain its current login URL. |
 | `tests/` | Host-side regression tests, without a Sage image. |
 | [`compiling_sage/`](compiling_sage/README.md) | Separate native Sage 10.10 source-build helpers and instructions. |
 | [Setup provenance](docs/setup-provenance.md) | Sources and changes made when incorporating SageQueue's setup. |

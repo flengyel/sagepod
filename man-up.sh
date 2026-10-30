@@ -35,17 +35,12 @@ ensure_image
 compose up -d
 "${SAGEPOD_ROOT}/bin/verify.sh"
 
-printf '\nJupyter: http://localhost:%s\n' "$PORT"
-# Jupyter writes its startup URL to stderr; include both log streams.
-TOKEN="$(podman logs --tail 2000 "$CONTAINER_NAME" 2>&1 | grep -Eo 'token=[0-9a-f]+' | tail -n 1 || true)"
-if [[ -n "$TOKEN" ]]; then
-  printf 'URL with token: http://localhost:%s/tree?%s\n' "$PORT" "$TOKEN"
-else
-  printf 'The token may appear shortly. Run: podman logs --tail 2000 %s\n' "$CONTAINER_NAME"
-fi
+JUPYTER_URL="$("${SAGEPOD_ROOT}/bin/jupyter-url.sh")"
+printf '\nJupyter login: %s\n' "$JUPYTER_URL"
 if [[ "$OPEN" == 1 ]] && command -v powershell.exe >/dev/null 2>&1; then
-  powershell.exe -NoProfile -Command "Start-Process 'http://localhost:${PORT}'" >/dev/null 2>&1 || true
+  powershell.exe -NoProfile -Command "Start-Process '${JUPYTER_URL}'" >/dev/null 2>&1 || true
 fi
 if [[ "$FOLLOW" == 1 ]]; then
-  exec podman logs -f "$CONTAINER_NAME"
+  echo 'Following new container log messages. Ctrl-C stops following; SagePod keeps running.'
+  exec podman logs --tail 0 -f "$CONTAINER_NAME"
 fi

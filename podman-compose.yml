@@ -30,7 +30,9 @@ services:
       - >
         set -euo pipefail;
         mkdir -p /home/sage/.local/share/jupyter/runtime /home/sage/.config /home/sage/.cache &&
-        exec ./sage -n jupyter --no-browser --ip=0.0.0.0 --port=8888 --notebook-dir=/home/sage/notebooks
+        exec ./sage -n jupyter --no-browser --ip=0.0.0.0 --port=8888 --port-retries=0
+        --ServerApp.custom_display_url=http://localhost:${PORT:-8889}
+        --notebook-dir=/home/sage/notebooks
 
     volumes:
       # These two directories may also be mounted by other Sage containers.
